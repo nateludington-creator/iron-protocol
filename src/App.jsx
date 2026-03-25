@@ -917,10 +917,22 @@ export default function App() {
                 </div>
               )}
 
+              {/* No API key banner */}
+              {!ninjaKey && !showApiSetup && (
+                <div onClick={() => setShowApiSetup(true)} style={{ background: sf2, border: `1px solid ${bd}`, borderRadius: 10, padding: "10px 14px", marginBottom: 8, cursor: "pointer", display: "flex", alignItems: "center", gap: 10, transition: "all .15s" }} onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(255,255,255,.2)"} onMouseLeave={e => e.currentTarget.style.borderColor = bd}>
+                  <span style={{ fontSize: 16 }}>🔑</span>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 600 }}>Set up API keys for best experience</div>
+                    <div style={{ fontSize: 11, color: t3 }}>CalorieNinjas for food search · Gemini for photo AI — both free</div>
+                  </div>
+                  <span style={{ marginLeft: "auto", color: t3 }}>→</span>
+                </div>
+              )}
+
               {/* Search + buttons */}
               <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
                 <div style={{ flex: 1, position: "relative" }}>
-                  <input className="ip" style={{ paddingLeft: 32 }} placeholder="Search food..." value={foodSearch} onChange={e => setFoodSearch(e.target.value)} />
+                  <input className="ip" style={{ paddingLeft: 32 }} placeholder={ninjaKey ? "Search any food... (e.g. bowl of ice cream)" : "Search food (basic — add API key for better results)"} value={foodSearch} onChange={e => setFoodSearch(e.target.value)} />
                   <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 13, opacity: 0.3 }}>🔍</span>
                   {searchLoading && <span className="spinner" style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", width: 14, height: 14 }} />}
                   {foodResults.length > 0 && (
