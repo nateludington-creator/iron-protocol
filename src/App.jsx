@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 
-/* ─────────────────────── CONSTANTS & DATA ─────────────────────── */
-
+/* ═══════════════════════════════════════════════════════════════
+   EQUIPMENT
+   ═══════════════════════════════════════════════════════════════ */
 const EQUIPMENT = [
   { id: "barbell", label: "Barbell", ico: "⬥" },
   { id: "dumbbells", label: "Dumbbells", ico: "◈" },
@@ -17,174 +18,304 @@ const EQUIPMENT = [
   { id: "bands", label: "Bands", ico: "〰" },
   { id: "lat_pulldown", label: "Lat Pulldown", ico: "▼" },
   { id: "leg_curl_ext", label: "Leg Curl/Ext", ico: "◗" },
+  { id: "landmine", label: "Landmine", ico: "◆" },
+  { id: "pec_deck", label: "Pec Deck", ico: "◐" },
+  { id: "hack_squat", label: "Hack Squat", ico: "◮" },
+  { id: "ghd", label: "GHD", ico: "◑" },
 ];
 
+/* ═══════════════════════════════════════════════════════════════
+   EXERCISE DATABASE — Creative variations with granular overlap tags
+
+   Joint tags are intentionally specific so the picker algorithm
+   naturally selects exercises with minimal redundancy.
+   e.g. "h_push_free" (DB bench) vs "h_push_fixed" (barbell bench)
+   have DIFFERENT tags — the free arm path recruits less tricep
+   because the humerus can adduct during the press.
+   ═══════════════════════════════════════════════════════════════ */
+const EX_DB = {
+  chest: [
+    // DB variations — free arm path means the humerus adducts during the press,
+    // shifting load from triceps onto pec fibers. Less lockout demand.
+    { name: "Low-Incline DB Press (20°)", eq: ["dumbbells", "bench"], joints: ["inc_push_free"], tier: 1 },
+    { name: "Flat DB Squeeze Press", eq: ["dumbbells", "bench"], joints: ["h_push_free", "chest_iso"], tier: 2 },
+    { name: "DB Floor Press", eq: ["dumbbells"], joints: ["h_push_short"], tier: 2 },
+
+    // Cable / fly — pure adduction with zero elbow extension = zero tricep
+    { name: "Flat DB Fly", eq: ["dumbbells", "bench"], joints: ["chest_add_free"], tier: 2 },
+    { name: "Low-to-High Cable Fly", eq: ["cables"], joints: ["chest_add_cable_low"], tier: 2 },
+    { name: "High-to-Low Cable Fly", eq: ["cables"], joints: ["chest_add_cable_high"], tier: 2 },
+    { name: "Incline Cable Fly", eq: ["cables", "bench"], joints: ["chest_add_cable_inc"], tier: 2 },
+    { name: "Pec Deck (inner-range partials)", eq: ["pec_deck"], joints: ["chest_add_machine"], tier: 2 },
+
+    // Machine / guided — more tricep than DB but still valuable
+    { name: "Reverse-Band Smith Incline Press", eq: ["smith_machine", "bands", "bench"], joints: ["inc_push_accom"], tier: 1 },
+    { name: "Landmine Kneeling Press", eq: ["landmine"], joints: ["arc_push"], tier: 2 },
+
+    // Compound / bodyweight — higher tricep overlap but great for progression
+    { name: "Dip (chest lean, slow eccentric)", eq: ["dip_bars"], joints: ["dec_push", "el_ext_dip"], tier: 1 },
+    { name: "Push-Up (deficit, feet elevated)", eq: [], joints: ["h_push_bw"], tier: 3 },
+    { name: "Standing Single-Arm Cable Press", eq: ["cables"], joints: ["h_push_cable_uni"], tier: 2 },
+  ],
+
+  back: [
+    // Supported rows — zero erector load, pure lat/rhomboid
+    { name: "Chest-Supported Incline DB Row", eq: ["dumbbells", "bench"], joints: ["h_pull_supported"], tier: 1 },
+    { name: "Seal Row (bench on blocks)", eq: ["barbell", "bench"], joints: ["h_pull_strict"], tier: 1 },
+
+    // Lat isolation — ZERO bicep involvement
+    { name: "Straight-Arm Cable Pulldown", eq: ["cables"], joints: ["lat_iso_cable"], tier: 2 },
+    { name: "DB Pullover (across bench)", eq: ["dumbbells", "bench"], joints: ["lat_ext_free"], tier: 2 },
+    { name: "Cable Pullover", eq: ["cables"], joints: ["lat_ext_cable"], tier: 2 },
+
+    // Vertical pulls — grip width changes bicep involvement dramatically
+    { name: "Wide-Grip Lat Pulldown", eq: ["lat_pulldown"], joints: ["v_pull_wide"], tier: 1 },
+    { name: "Neutral-Grip Pull-Up", eq: ["pullup_bar"], joints: ["v_pull_neutral_bw"], tier: 1 },
+    { name: "Chin-Up (supinated)", eq: ["pullup_bar"], joints: ["v_pull_sup_bw"], tier: 1 },
+
+    // Unilateral / unique angles
+    { name: "Meadows Row (landmine)", eq: ["landmine", "barbell"], joints: ["h_pull_uni_angle"], tier: 1 },
+    { name: "Single-Arm High Cable Row", eq: ["cables"], joints: ["h_pull_uni_high"], tier: 2 },
+    { name: "Kayak Row (cable)", eq: ["cables"], joints: ["h_pull_rotational"], tier: 2 },
+
+    // Heavy / power
+    { name: "Snatch-Grip Barbell Row", eq: ["barbell"], joints: ["h_pull_wide_bb"], tier: 1 },
+    { name: "Pendlay Row", eq: ["barbell"], joints: ["h_pull_explosive"], tier: 1 },
+  ],
+
+  shoulders: [
+    // Vertical press variations — each has different delt head emphasis
+    { name: "Half-Kneeling Landmine Press", eq: ["landmine", "barbell"], joints: ["v_push_arc"], tier: 1 },
+    { name: "Arnold Press", eq: ["dumbbells"], joints: ["v_push_rotational"], tier: 1 },
+    { name: "Seated DB Shoulder Press", eq: ["dumbbells", "bench"], joints: ["v_push_free"], tier: 1 },
+    { name: "Smith Machine OHP", eq: ["smith_machine"], joints: ["v_push_fixed"], tier: 1 },
+
+    // Lateral raises — constant tension (cable) vs peak-contraction (DB)
+    { name: "Cable Lateral Raise (behind back start)", eq: ["cables"], joints: ["sh_abd_cable"], tier: 2 },
+    { name: "Lean-Away DB Lateral Raise", eq: ["dumbbells"], joints: ["sh_abd_stretch"], tier: 2 },
+    { name: "Lu Raise (front raise → ext. rotation)", eq: ["dumbbells"], joints: ["sh_flex_rotation"], tier: 2 },
+    { name: "Cable Y-Raise", eq: ["cables"], joints: ["sh_abd_overhead"], tier: 2 },
+  ],
+
+  rear_delts: [
+    { name: "Face Pull to External Rotation", eq: ["cables"], joints: ["h_pull_high_rot"], tier: 2 },
+    { name: "Reverse Pec Deck", eq: ["pec_deck"], joints: ["h_abd_machine"], tier: 2 },
+    { name: "Prone Incline Y-Raise (DB)", eq: ["dumbbells", "bench"], joints: ["h_abd_prone"], tier: 2 },
+    { name: "Band Pull-Apart", eq: ["bands"], joints: ["h_abd_band"], tier: 3 },
+    { name: "Rear Delt Cable Fly (bent)", eq: ["cables"], joints: ["h_abd_cable"], tier: 2 },
+    { name: "Prone DB Rear Fly", eq: ["dumbbells"], joints: ["h_abd_free"], tier: 2 },
+  ],
+
+  quads: [
+    // Squat patterns — anterior vs posterior chain bias
+    { name: "Heel-Elevated Goblet Squat", eq: ["dumbbells"], joints: ["kn_ext_goblet"], tier: 1 },
+    { name: "Barbell Front Squat", eq: ["barbell", "squat_rack"], joints: ["kn_ext_front_load"], tier: 1 },
+    { name: "Hack Squat", eq: ["hack_squat"], joints: ["kn_ext_machine"], tier: 1 },
+    { name: "Leg Press (feet low & narrow)", eq: ["leg_press"], joints: ["kn_ext_press"], tier: 1 },
+
+    // Unilateral — balance + single-leg strength
+    { name: "Front Foot Elevated Split Squat", eq: ["dumbbells"], joints: ["kn_ext_uni_elevated"], tier: 1 },
+    { name: "Bulgarian Split Squat", eq: ["dumbbells", "bench"], joints: ["kn_ext_uni_deep"], tier: 1 },
+    { name: "Walking Lunge (short step, upright)", eq: ["dumbbells"], joints: ["kn_ext_dynamic"], tier: 2 },
+
+    // Isolation
+    { name: "Leg Extension (pause at top)", eq: ["leg_curl_ext"], joints: ["kn_ext_iso"], tier: 2 },
+    { name: "Sissy Squat", eq: [], joints: ["kn_ext_bw"], tier: 3 },
+  ],
+
+  hamstrings: [
+    // Knee flexion — seated vs lying changes which head is emphasized
+    { name: "Seated Leg Curl (toes pointed)", eq: ["leg_curl_ext"], joints: ["kn_flex_seated"], tier: 2 },
+    { name: "Lying Leg Curl", eq: ["leg_curl_ext"], joints: ["kn_flex_prone"], tier: 2 },
+    { name: "Nordic Curl (eccentric focus)", eq: [], joints: ["kn_flex_eccentric"], tier: 1 },
+    { name: "Glute-Ham Raise", eq: ["ghd"], joints: ["kn_flex_hip_ext"], tier: 1 },
+
+    // Hip hinge — bilateral vs unilateral, deficit adds ROM
+    { name: "Deficit Barbell RDL (1\" platform)", eq: ["barbell"], joints: ["hip_hinge_deficit"], tier: 1 },
+    { name: "Single-Leg DB RDL", eq: ["dumbbells"], joints: ["hip_hinge_uni"], tier: 1 },
+    { name: "KB Swing (hip snap)", eq: ["kettlebell"], joints: ["hip_hinge_ballistic"], tier: 2 },
+    { name: "Cable Pull-Through", eq: ["cables"], joints: ["hip_ext_cable_through"], tier: 2 },
+    { name: "45° Back Extension (DB held)", eq: ["dumbbells"], joints: ["hip_hinge_bw_loaded"], tier: 2 },
+  ],
+
+  glutes: [
+    { name: "Barbell Hip Thrust", eq: ["barbell", "bench"], joints: ["hip_ext_horiz"], tier: 1 },
+    { name: "Single-Leg Hip Thrust (foot on bench)", eq: ["bench"], joints: ["hip_ext_uni"], tier: 1 },
+    { name: "Cable Kickback (ankle strap)", eq: ["cables"], joints: ["hip_ext_cable_kick"], tier: 2 },
+    { name: "High Box Step-Up", eq: ["dumbbells", "bench"], joints: ["hip_ext_step"], tier: 1 },
+    { name: "Frog Pump", eq: [], joints: ["hip_ext_short"], tier: 3 },
+    { name: "Sumo Squat (DB)", eq: ["dumbbells"], joints: ["hip_ext_wide"], tier: 2 },
+    { name: "Banded Clamshell", eq: ["bands"], joints: ["hip_abd_band"], tier: 3 },
+  ],
+
+  biceps: [
+    // Long head stretched (arm behind body) vs short head (arm in front)
+    { name: "Incline DB Curl (45°)", eq: ["dumbbells", "bench"], joints: ["el_flex_stretched"], tier: 1 },
+    { name: "Bayesian Cable Curl (arm behind)", eq: ["cables"], joints: ["el_flex_cable_behind"], tier: 1 },
+    { name: "Preacher Curl (EZ bar)", eq: ["ez_bar"], joints: ["el_flex_shortened"], tier: 1 },
+    { name: "Spider Curl (prone incline)", eq: ["dumbbells", "bench"], joints: ["el_flex_peak"], tier: 2 },
+    { name: "Cross-Body Hammer Curl", eq: ["dumbbells"], joints: ["el_flex_neutral_cross"], tier: 2 },
+    { name: "Concentration Curl", eq: ["dumbbells"], joints: ["el_flex_iso"], tier: 2 },
+    { name: "Cable Curl (straight bar)", eq: ["cables"], joints: ["el_flex_cable"], tier: 2 },
+  ],
+
+  triceps: [
+    // Long head stretched (arm overhead) vs lateral head (pushdown)
+    { name: "Overhead Cable Extension (rope)", eq: ["cables"], joints: ["el_ext_oh_cable"], tier: 1 },
+    { name: "Single-Arm OH DB Extension", eq: ["dumbbells"], joints: ["el_ext_oh_uni"], tier: 2 },
+    { name: "EZ Skull Crusher", eq: ["ez_bar", "bench"], joints: ["el_ext_oh_free"], tier: 1 },
+    { name: "Cable Pushdown (V-bar)", eq: ["cables"], joints: ["el_ext_pushdown"], tier: 1 },
+    { name: "JM Press", eq: ["barbell", "bench"], joints: ["el_ext_compound"], tier: 1 },
+    { name: "Cable Kickback", eq: ["cables"], joints: ["el_ext_peak"], tier: 2 },
+    { name: "Diamond Push-Up", eq: [], joints: ["el_ext_bw"], tier: 3 },
+  ],
+
+  calves: [
+    { name: "Standing Calf Raise (machine)", eq: ["smith_machine"], joints: ["ank_plantar_straight"], tier: 1 },
+    { name: "Seated Calf Raise", eq: ["leg_press"], joints: ["ank_plantar_bent"], tier: 1 },
+    { name: "Single-Leg DB Calf Raise", eq: ["dumbbells"], joints: ["ank_plantar_uni"], tier: 2 },
+    { name: "Leg Press Calf Raise", eq: ["leg_press"], joints: ["ank_plantar_press"], tier: 2 },
+    { name: "Tibialis Raise (band)", eq: ["bands"], joints: ["ank_dorsi"], tier: 3 },
+  ],
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   SPLIT DEFINITIONS — 3 unique rotations per type (6 days each)
+   The group ORDER affects exercise selection priority.
+   Cross-day uniqueness is enforced by the generator.
+   ═══════════════════════════════════════════════════════════════ */
 const SPLITS = [
+  {
+    id: "upper_lower",
+    name: "Upper / Lower",
+    freq: "4x/wk · 6-day rotation",
+    note: "U1 → L1 → off → U2 → L2 → off → off · then U3 → L3 next week. Every session is unique.",
+    days: [
+      { name: "Upper A — Push Focus", groups: ["chest", "chest", "shoulders", "back", "triceps"] },
+      { name: "Lower A — Squat Pattern", groups: ["quads", "quads", "hamstrings", "glutes", "calves"] },
+      { name: "Upper B — Pull Focus", groups: ["back", "back", "shoulders", "chest", "biceps"] },
+      { name: "Lower B — Hinge Pattern", groups: ["hamstrings", "hamstrings", "quads", "glutes", "calves"] },
+      { name: "Upper C — Arms & Angles", groups: ["chest", "back", "rear_delts", "biceps", "triceps"] },
+      { name: "Lower C — Unilateral", groups: ["quads", "hamstrings", "glutes", "glutes", "calves"] },
+    ],
+  },
   {
     id: "torso_limb",
     name: "Torso / Limb",
-    freq: "4x/wk",
-    note: "Torso A → Limb A → off → Torso B → Limb B → off → off",
+    freq: "4x/wk · 6-day rotation",
+    note: "T1 → Li1 → off → T2 → Li2 → off → off · then T3 → Li3 next week. All days different.",
     days: [
-      { name: "Torso A", groups: ["chest", "back", "shoulders"] },
-      { name: "Limb A", groups: ["quads", "hamstrings", "biceps", "triceps"] },
-      { name: "Torso B", groups: ["back", "chest", "shoulders"] },
-      { name: "Limb B", groups: ["hamstrings", "quads", "triceps", "biceps"] },
+      { name: "Torso A — Horizontal", groups: ["chest", "back", "chest", "back", "shoulders"] },
+      { name: "Limb A — Quads & Bis", groups: ["quads", "quads", "hamstrings", "biceps", "biceps"] },
+      { name: "Torso B — Vertical", groups: ["shoulders", "back", "back", "chest", "rear_delts"] },
+      { name: "Limb B — Hams & Tris", groups: ["hamstrings", "hamstrings", "quads", "triceps", "triceps"] },
+      { name: "Torso C — Angles & Cable", groups: ["chest", "back", "shoulders", "rear_delts", "chest"] },
+      { name: "Limb C — Glutes & Arms", groups: ["glutes", "glutes", "calves", "biceps", "triceps"] },
     ],
   },
   {
     id: "anterior_posterior",
     name: "Anterior / Posterior",
-    freq: "4x/wk",
-    note: "Anterior → Posterior → off → Anterior → Posterior → off → off",
+    freq: "4x/wk · 6-day rotation",
+    note: "A1 → P1 → off → A2 → P2 → off → off · then A3 → P3. Push/pull with legs.",
     days: [
-      { name: "Anterior A", groups: ["chest", "quads", "shoulders", "triceps"] },
-      { name: "Posterior A", groups: ["back", "hamstrings", "biceps", "rear_delts"] },
-      { name: "Anterior B", groups: ["quads", "chest", "shoulders", "triceps"] },
-      { name: "Posterior B", groups: ["hamstrings", "back", "biceps", "rear_delts"] },
-    ],
-  },
-  {
-    id: "upper_lower",
-    name: "Upper / Lower",
-    freq: "4x/wk",
-    note: "Upper → Lower → off → Upper → Lower → off → off",
-    days: [
-      { name: "Upper A", groups: ["chest", "back", "shoulders", "biceps", "triceps"] },
-      { name: "Lower A", groups: ["quads", "hamstrings", "glutes", "calves"] },
-      { name: "Upper B", groups: ["back", "chest", "shoulders", "triceps", "biceps"] },
-      { name: "Lower B", groups: ["hamstrings", "quads", "glutes", "calves"] },
+      { name: "Anterior A — Compounds", groups: ["chest", "quads", "shoulders", "quads", "triceps"] },
+      { name: "Posterior A — Compounds", groups: ["back", "hamstrings", "rear_delts", "hamstrings", "biceps"] },
+      { name: "Anterior B — Moderate", groups: ["quads", "chest", "shoulders", "chest", "triceps"] },
+      { name: "Posterior B — Moderate", groups: ["hamstrings", "back", "back", "biceps", "rear_delts"] },
+      { name: "Anterior C — Unilateral", groups: ["chest", "quads", "shoulders", "quads", "triceps"] },
+      { name: "Posterior C — Detail", groups: ["back", "hamstrings", "glutes", "biceps", "rear_delts"] },
     ],
   },
   {
     id: "full_body",
-    name: "Full Body EOD",
-    freq: "3-4x/wk",
-    note: "Train → off → Train → off → Train → off → off",
+    name: "Full Body",
+    freq: "3x/wk · 3-day rotation",
+    note: "A → off → B → off → C → off → off. Each session hits everything differently.",
     days: [
-      { name: "Full Body A", groups: ["quads", "chest", "back", "shoulders"] },
-      { name: "Full Body B", groups: ["hamstrings", "back", "chest", "shoulders"] },
-      { name: "Full Body C", groups: ["quads", "hamstrings", "chest", "back"] },
+      { name: "Full Body A — Squat + Press", groups: ["quads", "chest", "back", "shoulders", "biceps"] },
+      { name: "Full Body B — Hinge + Pull", groups: ["hamstrings", "back", "chest", "triceps", "rear_delts"] },
+      { name: "Full Body C — Unilateral Mix", groups: ["quads", "hamstrings", "chest", "back", "glutes"] },
     ],
   },
 ];
 
-const EX_DB = {
-  chest: [
-    { name: "Barbell Bench Press", eq: ["barbell", "bench"], joints: ["horizontal_push", "elbow_ext"], tier: 1 },
-    { name: "Dumbbell Bench Press", eq: ["dumbbells", "bench"], joints: ["horizontal_push", "elbow_ext"], tier: 1 },
-    { name: "Incline DB Press", eq: ["dumbbells", "bench"], joints: ["incline_push", "elbow_ext"], tier: 1 },
-    { name: "Cable Flye", eq: ["cables"], joints: ["horizontal_adduction"], tier: 2 },
-    { name: "Dips (Chest)", eq: ["dip_bars"], joints: ["horizontal_push", "elbow_ext"], tier: 1 },
-    { name: "Push-Ups", eq: [], joints: ["horizontal_push", "elbow_ext"], tier: 3 },
-  ],
-  back: [
-    { name: "Barbell Row", eq: ["barbell"], joints: ["horizontal_pull", "elbow_flex"], tier: 1 },
-    { name: "Pull-Ups", eq: ["pullup_bar"], joints: ["vertical_pull", "elbow_flex"], tier: 1 },
-    { name: "Lat Pulldown", eq: ["lat_pulldown"], joints: ["vertical_pull", "elbow_flex"], tier: 1 },
-    { name: "Cable Row", eq: ["cables"], joints: ["horizontal_pull", "elbow_flex"], tier: 1 },
-    { name: "Dumbbell Row", eq: ["dumbbells"], joints: ["horizontal_pull", "elbow_flex"], tier: 1 },
-    { name: "Chin-Ups", eq: ["pullup_bar"], joints: ["vertical_pull", "elbow_flex_supinated"], tier: 1 },
-  ],
-  shoulders: [
-    { name: "Overhead Press", eq: ["barbell", "squat_rack"], joints: ["vertical_push", "elbow_ext"], tier: 1 },
-    { name: "DB Shoulder Press", eq: ["dumbbells"], joints: ["vertical_push", "elbow_ext"], tier: 1 },
-    { name: "Lateral Raise", eq: ["dumbbells"], joints: ["shoulder_abduction"], tier: 2 },
-    { name: "Cable Lateral Raise", eq: ["cables"], joints: ["shoulder_abduction"], tier: 2 },
-  ],
-  rear_delts: [
-    { name: "Face Pull", eq: ["cables"], joints: ["horizontal_pull", "ext_rotation"], tier: 2 },
-    { name: "Rear Delt Fly", eq: ["dumbbells"], joints: ["horizontal_abduction"], tier: 2 },
-    { name: "Band Pull-Apart", eq: ["bands"], joints: ["horizontal_abduction"], tier: 3 },
-  ],
-  quads: [
-    { name: "Barbell Back Squat", eq: ["barbell", "squat_rack"], joints: ["knee_ext", "hip_ext"], tier: 1 },
-    { name: "Front Squat", eq: ["barbell", "squat_rack"], joints: ["knee_ext", "hip_ext"], tier: 1 },
-    { name: "Leg Press", eq: ["leg_press"], joints: ["knee_ext", "hip_ext"], tier: 1 },
-    { name: "Bulgarian Split Squat", eq: ["dumbbells"], joints: ["knee_ext", "hip_ext"], tier: 1 },
-    { name: "Goblet Squat", eq: ["dumbbells"], joints: ["knee_ext", "hip_ext"], tier: 2 },
-    { name: "Leg Extension", eq: ["leg_curl_ext"], joints: ["knee_ext"], tier: 2 },
-  ],
-  hamstrings: [
-    { name: "Romanian Deadlift", eq: ["barbell"], joints: ["hip_hinge", "knee_flex_isometric"], tier: 1 },
-    { name: "DB Romanian Deadlift", eq: ["dumbbells"], joints: ["hip_hinge"], tier: 1 },
-    { name: "Leg Curl", eq: ["leg_curl_ext"], joints: ["knee_flex"], tier: 2 },
-    { name: "KB Swing", eq: ["kettlebell"], joints: ["hip_hinge", "hip_ext"], tier: 2 },
-    { name: "Nordic Curl", eq: [], joints: ["knee_flex"], tier: 1 },
-  ],
-  glutes: [
-    { name: "Hip Thrust", eq: ["barbell", "bench"], joints: ["hip_ext"], tier: 1 },
-    { name: "DB Hip Thrust", eq: ["dumbbells", "bench"], joints: ["hip_ext"], tier: 1 },
-    { name: "Cable Kickback", eq: ["cables"], joints: ["hip_ext"], tier: 2 },
-    { name: "Glute Bridge", eq: [], joints: ["hip_ext"], tier: 3 },
-  ],
-  biceps: [
-    { name: "Barbell Curl", eq: ["barbell"], joints: ["elbow_flex_supinated"], tier: 1 },
-    { name: "EZ Bar Curl", eq: ["ez_bar"], joints: ["elbow_flex_supinated"], tier: 1 },
-    { name: "DB Hammer Curl", eq: ["dumbbells"], joints: ["elbow_flex_neutral"], tier: 2 },
-    { name: "Cable Curl", eq: ["cables"], joints: ["elbow_flex_supinated"], tier: 2 },
-  ],
-  triceps: [
-    { name: "Close-Grip Bench", eq: ["barbell", "bench"], joints: ["elbow_ext", "horizontal_push"], tier: 1 },
-    { name: "Cable Pushdown", eq: ["cables"], joints: ["elbow_ext"], tier: 1 },
-    { name: "Overhead DB Extension", eq: ["dumbbells"], joints: ["elbow_ext_overhead"], tier: 2 },
-    { name: "Skull Crusher", eq: ["ez_bar", "bench"], joints: ["elbow_ext_overhead"], tier: 1 },
-  ],
-  calves: [
-    { name: "Standing Calf Raise", eq: ["smith_machine"], joints: ["ankle_plantar"], tier: 1 },
-    { name: "DB Calf Raise", eq: ["dumbbells"], joints: ["ankle_plantar"], tier: 2 },
-    { name: "Leg Press Calf Raise", eq: ["leg_press"], joints: ["ankle_plantar"], tier: 2 },
-    { name: "BW Calf Raise", eq: [], joints: ["ankle_plantar"], tier: 3 },
-  ],
-};
+/* ═══════════════════════════════════════════════════════════════
+   PROGRAM GENERATION — picks exercises across ALL days at once
+   so no exercise appears on more than one day.
+   Within each day, maximizes joint-function diversity.
+   ═══════════════════════════════════════════════════════════════ */
+function generateProgram(split, equipSet) {
+  const usedNames = new Set();
+  return split.days.map((day) => {
+    const exercises = pickForDay(day.groups, equipSet, 5, usedNames);
+    exercises.forEach((ex) => usedNames.add(ex.name));
+    return { ...day, exercises };
+  });
+}
 
-function pickExercises(groups, equipSet, target = 5) {
+function pickForDay(groups, equipSet, target, usedNames) {
   const coveredJoints = new Set();
   const picked = [];
+  const pickedNames = new Set();
+
   for (const g of groups) {
+    if (picked.length >= target) break;
     const pool = (EX_DB[g] || [])
+      .filter((ex) => !usedNames.has(ex.name) && !pickedNames.has(ex.name))
       .filter((ex) => ex.eq.length === 0 || ex.eq.every((e) => equipSet.has(e)))
       .sort((a, b) => a.tier - b.tier);
+
+    let best = null;
+    let bestScore = -1;
     for (const ex of pool) {
-      const newJoints = ex.joints.filter((j) => !coveredJoints.has(j));
-      if (newJoints.length > 0 && picked.length < target) {
-        picked.push({ ...ex, muscle: g });
-        ex.joints.forEach((j) => coveredJoints.add(j));
-        break;
-      }
+      const newJ = ex.joints.filter((j) => !coveredJoints.has(j)).length;
+      const score = newJ * 10 + (4 - ex.tier);
+      if (score > bestScore) { best = ex; bestScore = score; }
+    }
+    if (best) {
+      picked.push({ ...best, muscle: g });
+      pickedNames.add(best.name);
+      best.joints.forEach((j) => coveredJoints.add(j));
     }
   }
+
+  // Fill remaining if needed
   if (picked.length < target) {
     for (const g of groups) {
+      if (picked.length >= target) break;
       const pool = (EX_DB[g] || [])
-        .filter((ex) => (ex.eq.length === 0 || ex.eq.every((e) => equipSet.has(e))) && !picked.some((p) => p.name === ex.name))
-        .sort((a, b) => a.tier - b.tier);
+        .filter((ex) => !usedNames.has(ex.name) && !pickedNames.has(ex.name))
+        .filter((ex) => ex.eq.length === 0 || ex.eq.every((e) => equipSet.has(e)));
       for (const ex of pool) {
-        const newJoints = ex.joints.filter((j) => !coveredJoints.has(j));
-        if (newJoints.length > 0 && picked.length < target) {
+        const newJ = ex.joints.filter((j) => !coveredJoints.has(j)).length;
+        if (newJ > 0 && picked.length < target) {
           picked.push({ ...ex, muscle: g });
+          pickedNames.add(ex.name);
           ex.joints.forEach((j) => coveredJoints.add(j));
         }
       }
-      if (picked.length >= target) break;
     }
   }
   return picked;
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   WEEK PROTOCOL (12-week periodization)
+   ═══════════════════════════════════════════════════════════════ */
 const WEEK_PROTOCOL = [
   { wk: 1, label: "Wk 1 — Intro 10RM", sets: 1, note: "Work up to 1 set at your 10-rep max." },
-  { wk: 2, label: "Wk 2 — Volume", sets: 2, note: "2 working sets x 8 reps using the same load as your 10RM." },
-  { wk: 3, label: "Wk 3 — Load Up", sets: 2, note: "Set 1: add load, 6 reps @ 2 RIR. Set 2: same load x 6 reps." },
-  { wk: 4, label: "Wk 4 — Rep Push", sets: 2, note: "Set 1: 7 reps with Wk 3 load. Set 2: reduce 10% x 7 reps." },
-  { wk: 5, label: "Wk 5 — Intensity", sets: 2, note: "Set 1: increase load, 5 reps @ 1 RIR. Set 2: -10% x 5 reps." },
-  { wk: 6, label: "Wk 6 — Static", sets: 2, note: "Same load as Wk 5. Set 1: 5 reps (more RIR). Set 2: -10% x 5." },
-  { wk: 7, label: "Wk 7 — Load Bump", sets: 2, note: "Set 1: increase load, 6 reps @ 1 RIR. Set 2: -10% x 6 reps." },
-  { wk: 8, label: "Wk 8 — Push", sets: 2, note: "Set 1: increase load, 5 reps @ 1 RIR. Set 2: -10% x 5 reps." },
-  { wk: 9, label: "Wk 9 — Static", sets: 2, note: "Same loads as Wk 8. Set 1: 5 reps. Set 2: -10% x 5." },
-  { wk: 10, label: "Wk 10 — Peak", sets: 2, note: "Set 1: increase load, 4 reps @ 1 RIR. Set 2: -10% x 5 reps." },
+  { wk: 2, label: "Wk 2 — Volume", sets: 2, note: "2 working sets × 8 reps using the same load as your 10RM." },
+  { wk: 3, label: "Wk 3 — Load Up", sets: 2, note: "Set 1: add load, 6 reps @ 2 RIR. Set 2: same load × 6." },
+  { wk: 4, label: "Wk 4 — Rep Push", sets: 2, note: "Set 1: 7 reps with Wk 3 load. Set 2: reduce 10% × 7." },
+  { wk: 5, label: "Wk 5 — Intensity", sets: 2, note: "Set 1: increase load, 5 reps @ 1 RIR. Set 2: -10% × 5." },
+  { wk: 6, label: "Wk 6 — Static", sets: 2, note: "Same load as Wk 5. Set 1: 5 reps. Set 2: -10% × 5." },
+  { wk: 7, label: "Wk 7 — Load Bump", sets: 2, note: "Set 1: increase load, 6 reps @ 1 RIR. Set 2: -10% × 6." },
+  { wk: 8, label: "Wk 8 — Push", sets: 2, note: "Set 1: increase load, 5 reps @ 1 RIR. Set 2: -10% × 5." },
+  { wk: 9, label: "Wk 9 — Static", sets: 2, note: "Same loads as Wk 8. Set 1: 5 reps. Set 2: -10% × 5." },
+  { wk: 10, label: "Wk 10 — Peak", sets: 2, note: "Set 1: increase load, 4 reps @ 1 RIR. Set 2: -10% × 5." },
   { wk: 11, label: "Wk 11 — Static", sets: 2, note: "Same loads as Wk 10. Set 1: 4 reps. Set 2: 5 reps." },
-  { wk: 12, label: "Wk 12 — Rep PR", sets: 2, note: "Set 1: hit 5 reps with your Wk 11 4-rep load! Set 2: -10% x 5." },
+  { wk: 12, label: "Wk 12 — Rep PR", sets: 2, note: "Set 1: hit 5 reps with your Wk 11 4-rep load! Set 2: -10% × 5." },
 ];
 
 const PROTOCOL_DETAIL = [
@@ -202,6 +333,9 @@ const PROTOCOL_DETAIL = [
   [{ reps: 5, rir: null, pct: "SAME", desc: "5 w/ Wk11 4-rep load" }, { reps: 5, rir: null, pct: "-10%", desc: "Back-off" }],
 ];
 
+/* ═══════════════════════════════════════════════════════════════
+   NUTRITION
+   ═══════════════════════════════════════════════════════════════ */
 function calcNutrition(weight, height, goal, weekData) {
   const weightKg = weight * 0.453592;
   const heightCm = height * 2.54;
@@ -260,9 +394,56 @@ const CUT_FOODS = [
   { name: "Olive Oil (16 oz)", price: 6.99, protein: 0, cals: 3600, cat: "Fats" },
 ];
 
-const MC = { chest: "#ef4444", back: "#3b82f6", shoulders: "#f59e0b", rear_delts: "#f59e0b", quads: "#10b981", hamstrings: "#06b6d4", glutes: "#8b5cf6", biceps: "#ec4899", triceps: "#f97316", calves: "#14b8a6" };
+/* ═══════════════════════════════════════════════════════════════
+   REAL STORE FINDER — OpenStreetMap Nominatim + Overpass API
+   ═══════════════════════════════════════════════════════════════ */
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 3959;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
-/* ─────────────────────── MAIN APP ─────────────────────── */
+async function geocodeLocation(query) {
+  const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=us`, {
+    headers: { "User-Agent": "IronProtocolApp/1.0" },
+  });
+  const data = await res.json();
+  if (!data.length) return null;
+  return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon), display: data[0].display_name };
+}
+
+async function findRealStores(lat, lon, radiusMeters = 8000) {
+  const query = `[out:json][timeout:12];(node["shop"="supermarket"](around:${radiusMeters},${lat},${lon});node["shop"="grocery"](around:${radiusMeters},${lat},${lon});node["shop"="convenience"](around:${radiusMeters},${lat},${lon}););out body;`;
+  const res = await fetch("https://overpass-api.de/api/interpreter", {
+    method: "POST",
+    body: `data=${encodeURIComponent(query)}`,
+  });
+  const data = await res.json();
+  return data.elements
+    .filter((el) => el.tags?.name)
+    .map((el) => ({
+      name: el.tags.name,
+      brand: el.tags.brand || "",
+      dist: haversine(lat, lon, el.lat, el.lon),
+    }))
+    .sort((a, b) => a.dist - b.dist)
+    .slice(0, 10);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   COLORS
+   ═══════════════════════════════════════════════════════════════ */
+const MC = {
+  chest: "#ef4444", back: "#3b82f6", shoulders: "#f59e0b", rear_delts: "#f59e0b",
+  quads: "#10b981", hamstrings: "#06b6d4", glutes: "#8b5cf6", biceps: "#ec4899",
+  triceps: "#f97316", calves: "#14b8a6",
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   MAIN APP
+   ═══════════════════════════════════════════════════════════════ */
 export default function App() {
   const [page, setPage] = useState("training");
   const [step, setStep] = useState(0);
@@ -273,19 +454,27 @@ export default function App() {
   const [activeWeek, setActiveWeek] = useState(0);
   const [checked, setChecked] = useState(new Set());
   const [logs, setLogs] = useState({});
+
+  // Nutrition
   const [nGoal, setNGoal] = useState(null);
   const [nWeight, setNWeight] = useState("");
   const [nHeight, setNHeight] = useState("");
   const [nSetup, setNSetup] = useState(false);
   const [weekCheckins, setWeekCheckins] = useState([]);
   const [checkinWt, setCheckinWt] = useState("");
+
+  // Grocery — real store finder
   const [groLoc, setGroLoc] = useState("");
   const [stores, setStores] = useState(null);
   const [groList, setGroList] = useState(null);
+  const [storeLoading, setStoreLoading] = useState(false);
+  const [storeError, setStoreError] = useState("");
+  const [geoDisplay, setGeoDisplay] = useState("");
 
   const split = SPLITS.find((s) => s.id === splitId);
   const proto = WEEK_PROTOCOL[activeWeek];
   const detail = PROTOCOL_DETAIL[activeWeek];
+
   const nutrition = useMemo(() => {
     if (!nWeight || !nHeight || !nGoal) return null;
     return calcNutrition(Number(nWeight), Number(nHeight), nGoal, weekCheckins);
@@ -294,13 +483,17 @@ export default function App() {
   const handleGen = () => {
     if (!split) return;
     const eqSet = new Set([...equip]);
-    setProgram(split.days.map((d) => ({ ...d, exercises: pickExercises(d.groups, eqSet, 5) })));
+    setProgram(generateProgram(split, eqSet));
+    setActiveDay(0);
     setStep(2);
   };
 
   const logW = (ei, si, v) => setLogs((p) => ({ ...p, [`${activeWeek}-${activeDay}-${ei}-${si}`]: v }));
   const getW = (ei, si) => logs[`${activeWeek}-${activeDay}-${ei}-${si}`] || "";
-  const togChk = (i) => { const k = `${activeWeek}-${activeDay}-${i}`; setChecked((p) => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n; }); };
+  const togChk = (i) => {
+    const k = `${activeWeek}-${activeDay}-${i}`;
+    setChecked((p) => { const n = new Set(p); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  };
 
   const doCheckin = () => {
     if (!checkinWt) return;
@@ -309,19 +502,29 @@ export default function App() {
     setCheckinWt("");
   };
 
-  const findStores = () => {
+  // Real store finder
+  const findStores = useCallback(async () => {
     if (!groLoc) return;
-    setStores([
-      { name: "Aldi", dist: "0.8 mi" },
-      { name: "Walmart Supercenter", dist: "1.2 mi" },
-      { name: "Trader Joe's", dist: "2.1 mi" },
-      { name: "Costco", dist: "3.4 mi" },
-    ]);
-    setGroList(nGoal === "cut" ? CUT_FOODS : BULK_FOODS);
-  };
+    setStoreLoading(true);
+    setStoreError("");
+    setStores(null);
+    try {
+      const geo = await geocodeLocation(groLoc);
+      if (!geo) { setStoreError("Couldn't find that location. Try a zip code or city name."); setStoreLoading(false); return; }
+      setGeoDisplay(geo.display);
+      const results = await findRealStores(geo.lat, geo.lon);
+      if (results.length === 0) { setStoreError("No stores found within 5 miles. Try a different location."); setStoreLoading(false); return; }
+      setStores(results);
+      setGroList(nGoal === "cut" ? CUT_FOODS : BULK_FOODS);
+    } catch (e) {
+      setStoreError("Network error — check your connection and try again.");
+    }
+    setStoreLoading(false);
+  }, [groLoc, nGoal]);
 
   const groTotal = groList ? groList.reduce((s, f) => s + f.price, 0).toFixed(2) : "0.00";
 
+  // Theme tokens
   const a = "#e84545", bg = "#08080c", sf = "rgba(255,255,255,0.025)", bd = "rgba(255,255,255,0.07)", dm = "rgba(255,255,255,0.35)", md = "rgba(255,255,255,0.6)";
 
   return (
@@ -331,6 +534,7 @@ export default function App() {
         *{box-sizing:border-box;margin:0;padding:0}
         @keyframes fi{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
         @keyframes pop{0%{transform:scale(.85)}50%{transform:scale(1.1)}100%{transform:scale(1)}}
+        @keyframes spin{to{transform:rotate(360deg)}}
         .ani{animation:fi .4s ease-out both}
         .bp{background:linear-gradient(135deg,${a},#c23030);color:#fff;border:none;border-radius:10px;padding:13px 36px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .2s}
         .bp:hover{transform:translateY(-2px);box-shadow:0 6px 24px rgba(232,69,69,.3)}
@@ -359,6 +563,7 @@ export default function App() {
         .ck{width:26px;height:26px;border-radius:50%;border:2px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;transition:all .2s;flex-shrink:0}
         .ck:hover{border-color:rgba(255,255,255,.25)}
         .ck.dn{background:${a};border-color:${a};animation:pop .25s ease-out}
+        .spinner{width:18px;height:18px;border:2px solid rgba(255,255,255,.1);border-top-color:${a};border-radius:50%;animation:spin .6s linear infinite;display:inline-block}
         ::-webkit-scrollbar{width:3px;height:3px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.08);border-radius:2px}
       `}</style>
 
@@ -378,7 +583,7 @@ export default function App() {
           ))}
         </div>
 
-        {/* ═══ TRAINING ═══ */}
+        {/* ═══ TRAINING — Step 0: Equipment ═══ */}
         {page === "training" && step === 0 && (
           <div className="ani">
             <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>Select Your Equipment</h2>
@@ -396,10 +601,11 @@ export default function App() {
           </div>
         )}
 
+        {/* ═══ TRAINING — Step 1: Split Selection ═══ */}
         {page === "training" && step === 1 && (
           <div className="ani">
             <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>Choose Your Split</h2>
-            <p style={{ fontSize: 13, color: dm, marginBottom: 20 }}>~5 exercises per session. Joint-function overlap eliminated.</p>
+            <p style={{ fontSize: 13, color: dm, marginBottom: 20 }}>3-day rotations — every session is unique. ~5 exercises per session, joint-overlap minimized.</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
               {SPLITS.map((s) => (
                 <div key={s.id} className={`sc ${splitId === s.id ? "on" : ""}`} onClick={() => setSplitId(s.id)}>
@@ -409,7 +615,7 @@ export default function App() {
                   </div>
                   <p style={{ fontSize: 12, color: dm, marginTop: 6 }}>{s.note}</p>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 10 }}>
-                    {s.days.map((d) => <span key={d.name} style={{ padding: "3px 10px", borderRadius: 6, fontSize: 10, fontWeight: 600, background: "rgba(232,69,69,.08)", color: a }}>{d.name}</span>)}
+                    {s.days.map((d) => <span key={d.name} style={{ padding: "3px 10px", borderRadius: 6, fontSize: 10, fontWeight: 600, background: "rgba(232,69,69,.08)", color: a }}>{d.name.split(" — ")[0]}</span>)}
                   </div>
                 </div>
               ))}
@@ -421,12 +627,13 @@ export default function App() {
           </div>
         )}
 
+        {/* ═══ TRAINING — Step 2: Program View ═══ */}
         {page === "training" && step === 2 && program && (
           <div className="ani">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <div>
                 <h2 style={{ fontSize: 18, fontWeight: 600 }}>{split?.name}</h2>
-                <p style={{ fontSize: 12, color: dm }}>{equip.size} equipment items • ~5 exercises/session</p>
+                <p style={{ fontSize: 12, color: dm }}>{equip.size} equipment · {program.length} unique sessions · ~5 exercises each</p>
               </div>
               <button className="bs" onClick={() => { setStep(1); setProgram(null); }}>← Edit</button>
             </div>
@@ -460,9 +667,14 @@ export default function App() {
               </div>
             </div>
 
-            {/* Day tabs */}
+            {/* Day tabs — scrollable for 6 days */}
             <div style={{ display: "flex", gap: 6, marginBottom: 14, overflowX: "auto", paddingBottom: 4 }}>
-              {program.map((d, i) => <div key={i} className={`tb ${activeDay === i ? "on" : ""}`} onClick={() => setActiveDay(i)}>{d.name}</div>)}
+              {program.map((d, i) => (
+                <div key={i} className={`tb ${activeDay === i ? "on" : ""}`} onClick={() => setActiveDay(i)} style={{ fontSize: 11, padding: "8px 14px" }}>
+                  {d.name.split(" — ")[0]}
+                  <div style={{ fontSize: 9, color: activeDay === i ? a : dm, marginTop: 2 }}>{d.name.split(" — ")[1] || ""}</div>
+                </div>
+              ))}
             </div>
 
             {/* Exercises */}
@@ -471,12 +683,12 @@ export default function App() {
                 const k = `${activeWeek}-${activeDay}-${i}`;
                 const done = checked.has(k);
                 return (
-                  <div key={i} style={{ display: "grid", gridTemplateColumns: "32px 1fr", gap: 12, padding: "14px 0", borderBottom: `1px solid ${bd}`, alignItems: "start", opacity: done ? .4 : 1 }}>
+                  <div key={i} style={{ display: "grid", gridTemplateColumns: "32px 1fr", gap: 12, padding: "14px 0", borderBottom: `1px solid ${bd}`, alignItems: "start", opacity: done ? 0.4 : 1 }}>
                     <div className={`ck ${done ? "dn" : ""}`} onClick={() => togChk(i)} style={{ marginTop: 2 }}>{done && "✓"}</div>
                     <div>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         <span style={{ fontSize: 14, fontWeight: 500, textDecoration: done ? "line-through" : "none" }}>{ex.name}</span>
-                        <span className="tg" style={{ background: `${MC[ex.muscle] || "#666"}18`, color: MC[ex.muscle] || "#888" }}>{ex.muscle.replace("_", " ")}</span>
+                        <span className="tg" style={{ background: `${MC[ex.muscle] || "#666"}18`, color: MC[ex.muscle] || "#888" }}>{ex.muscle.replace(/_/g, " ")}</span>
                       </div>
                       <div style={{ display: "flex", gap: 3, marginTop: 4, flexWrap: "wrap" }}>
                         {ex.joints.map((j) => <span key={j} style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "rgba(255,255,255,.04)", color: dm }}>{j.replace(/_/g, " ")}</span>)}
@@ -499,13 +711,13 @@ export default function App() {
                 );
               })}
               {(!program[activeDay]?.exercises || program[activeDay].exercises.length === 0) && (
-                <div style={{ padding: 32, textAlign: "center", color: dm, fontSize: 13 }}>No exercises matched. Try adding more equipment.</div>
+                <div style={{ padding: 32, textAlign: "center", color: dm, fontSize: 13 }}>No exercises matched your equipment. Try adding more.</div>
               )}
             </div>
           </div>
         )}
 
-        {/* ═══ NUTRITION ═══ */}
+        {/* ═══ NUTRITION — Setup ═══ */}
         {page === "nutrition" && !nSetup && (
           <div className="ani">
             <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>Nutrition Setup</h2>
@@ -534,6 +746,7 @@ export default function App() {
           </div>
         )}
 
+        {/* ═══ NUTRITION — Dashboard ═══ */}
         {page === "nutrition" && nSetup && nutrition && (
           <div className="ani">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -565,14 +778,14 @@ export default function App() {
             <div style={{ background: sf, border: `1px solid ${bd}`, borderRadius: 12, padding: 16, marginBottom: 14 }}>
               <div style={{ fontSize: 10, fontWeight: 600, color: dm, textTransform: "uppercase", marginBottom: 10 }}>Macro Split</div>
               <div style={{ height: 14, borderRadius: 7, overflow: "hidden", display: "flex", marginBottom: 8 }}>
-                <div style={{ width: `${(nutrition.protein * 4 / nutrition.cals) * 100}%`, background: "#3b82f6", transition: "width .3s" }} />
-                <div style={{ width: `${(nutrition.carbs * 4 / nutrition.cals) * 100}%`, background: "#10b981", transition: "width .3s" }} />
-                <div style={{ width: `${(nutrition.fat * 9 / nutrition.cals) * 100}%`, background: "#f59e0b", transition: "width .3s" }} />
+                <div style={{ width: `${((nutrition.protein * 4) / nutrition.cals) * 100}%`, background: "#3b82f6", transition: "width .3s" }} />
+                <div style={{ width: `${((nutrition.carbs * 4) / nutrition.cals) * 100}%`, background: "#10b981", transition: "width .3s" }} />
+                <div style={{ width: `${((nutrition.fat * 9) / nutrition.cals) * 100}%`, background: "#f59e0b", transition: "width .3s" }} />
               </div>
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: md }}>
-                <span>Protein {Math.round((nutrition.protein * 4 / nutrition.cals) * 100)}%</span>
-                <span>Carbs {Math.round((nutrition.carbs * 4 / nutrition.cals) * 100)}%</span>
-                <span>Fat {Math.round((nutrition.fat * 9 / nutrition.cals) * 100)}%</span>
+                <span>Protein {Math.round(((nutrition.protein * 4) / nutrition.cals) * 100)}%</span>
+                <span>Carbs {Math.round(((nutrition.carbs * 4) / nutrition.cals) * 100)}%</span>
+                <span>Fat {Math.round(((nutrition.fat * 9) / nutrition.cals) * 100)}%</span>
               </div>
             </div>
 
@@ -604,7 +817,7 @@ export default function App() {
         {page === "grocery" && (
           <div className="ani">
             <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>Grocery Planner</h2>
-            <p style={{ fontSize: 13, color: dm, marginBottom: 20 }}>{nGoal ? `${nGoal === "bulk" ? "Bulking" : "Cutting"} list optimized for your macros.` : "Set up nutrition first for a tailored list."}</p>
+            <p style={{ fontSize: 13, color: dm, marginBottom: 20 }}>{nGoal ? `${nGoal === "bulk" ? "Bulking" : "Cutting"} list optimized for your macros. Real stores near you.` : "Set up nutrition first for a tailored list."}</p>
 
             {!nGoal ? (
               <div style={{ background: sf, border: `1px solid ${bd}`, borderRadius: 12, padding: 24, textAlign: "center" }}>
@@ -613,19 +826,24 @@ export default function App() {
               </div>
             ) : (
               <>
-                <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-                  <input className="ip" style={{ flex: 1 }} placeholder="Enter zip code or city..." value={groLoc} onChange={(e) => setGroLoc(e.target.value)} />
-                  <button className="bp" style={{ padding: "11px 24px", fontSize: 13 }} onClick={findStores} disabled={!groLoc}>Find Stores</button>
+                <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                  <input className="ip" style={{ flex: 1 }} placeholder="Enter zip code, city, or address..." value={groLoc} onChange={(e) => setGroLoc(e.target.value)} onKeyDown={(e) => e.key === "Enter" && findStores()} />
+                  <button className="bp" style={{ padding: "11px 24px", fontSize: 13, display: "flex", alignItems: "center", gap: 8 }} onClick={findStores} disabled={!groLoc || storeLoading}>
+                    {storeLoading ? <><span className="spinner" /> Searching...</> : "Find Stores"}
+                  </button>
                 </div>
+                {geoDisplay && <p style={{ fontSize: 11, color: dm, marginBottom: 16 }}>📍 {geoDisplay}</p>}
+                {storeError && <p style={{ fontSize: 13, color: a, marginBottom: 16 }}>{storeError}</p>}
 
                 {stores && (
                   <div style={{ marginBottom: 24 }}>
-                    <div style={{ fontSize: 10, fontWeight: 600, color: dm, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 8 }}>Nearby Stores</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(170px,1fr))", gap: 8 }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: dm, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 8 }}>Nearby Stores ({stores.length} found)</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 8 }}>
                       {stores.map((s, i) => (
                         <div key={i} style={{ background: sf, border: `1px solid ${bd}`, borderRadius: 10, padding: 14 }}>
                           <div style={{ fontSize: 14, fontWeight: 600 }}>{s.name}</div>
-                          <div style={{ fontSize: 12, color: dm, marginTop: 2 }}>{s.dist}</div>
+                          {s.brand && s.brand !== s.name && <div style={{ fontSize: 11, color: md, marginTop: 1 }}>{s.brand}</div>}
+                          <div style={{ fontSize: 12, color: a, fontFamily: "'JetBrains Mono'", fontWeight: 600, marginTop: 4 }}>{s.dist.toFixed(1)} mi</div>
                         </div>
                       ))}
                     </div>
