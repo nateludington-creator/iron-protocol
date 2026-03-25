@@ -805,9 +805,12 @@ export default function App() {
                           <span style={{ fontSize: 9, padding: "2px 8px", borderRadius: 20, background: sf2, color: t3, fontWeight: 600, textTransform: "uppercase" }}>{ex.muscle.replace(/_/g, " ")}</span>
                         </div>
                         {ex.cues && (
-                          <div style={{ display: "flex", gap: 6, marginTop: 5, flexWrap: "wrap" }}>
+                          <div style={{ marginTop: 6, paddingLeft: 2 }}>
                             {ex.cues.map((cue, ci) => (
-                              <span key={ci} style={{ fontSize: 10, padding: "3px 10px", borderRadius: 8, background: "rgba(255,255,255,.03)", border: `1px solid rgba(255,255,255,.06)`, color: t2, fontStyle: "italic", lineHeight: 1.3 }}>💡 {cue}</span>
+                              <div key={ci} style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 3 }}>
+                                <span style={{ fontSize: 4, color: t3, lineHeight: 1, flexShrink: 0, marginTop: 4 }}>●</span>
+                                <span style={{ fontSize: 11, color: t2, lineHeight: 1.4 }}>{cue}</span>
+                              </div>
                             ))}
                           </div>
                         )}
