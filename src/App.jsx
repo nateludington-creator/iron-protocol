@@ -768,6 +768,8 @@ export default function App() {
   const [showComplete, setShowComplete] = useState(false);
   const [dailyTipIdx, setDailyTipIdx] = useState(0);
   const [rotationIndex, setRotationIndex] = useState(0);
+  const [xpFloats, setXpFloats] = useState([]);
+  const [macrosCelebrate, setMacrosCelebrate] = useState(false);
 
   // Nutrition
   const [nGoal, setNGoal] = useState(null);
@@ -880,8 +882,13 @@ export default function App() {
     setLastActiveDate(today);
   }, [lastActiveDate]);
 
-  // XP gain
-  const gainXp = useCallback((amount) => { setXp(x => x + amount); }, []);
+  // XP gain with floating visual
+  const gainXp = useCallback((amount) => {
+    setXp(x => x + amount);
+    const id = Date.now() + Math.random();
+    setXpFloats(p => [...p, { id, amount }]);
+    setTimeout(() => setXpFloats(p => p.filter(f => f.id !== id)), 1500);
+  }, []);
 
   // PR detection — called when logging weight
   const checkPR = useCallback((exName, weight) => {
@@ -926,11 +933,19 @@ export default function App() {
     }
   };
 
-  // Enhanced addFood with streak
+  // Enhanced addFood with streak + macro celebration
   const addFoodHooked = (entry) => {
     addFood(entry);
     gainXp(5);
     updateStreak();
+    // Check if protein target just got hit
+    if (nutrition) {
+      const newProtein = totals.protein + (entry.protein || 0);
+      if (totals.protein < nutrition.protein && newProtein >= nutrition.protein) {
+        setMacrosCelebrate(true);
+        setTimeout(() => setMacrosCelebrate(false), 3000);
+      }
+    }
   };
 
   // Advance daily tip on mount
@@ -996,6 +1011,8 @@ export default function App() {
 
   // ─── Theme ───
   const bg = "#000", sf = "rgba(255,255,255,.03)", sf2 = "rgba(255,255,255,.06)", bd = "rgba(255,255,255,.1)", t1 = "#fff", t2 = "rgba(255,255,255,.55)", t3 = "rgba(255,255,255,.3)";
+  // Dopamine color accents
+  const cGold = "#fbbf24", cGreen = "#4ade80", cOrange = "#fb923c", cBlue = "#60a5fa", cPurple = "#a78bfa";
 
   // ═══════════ SIGN IN / CREATE PROFILE ═══════════
   if (!profileId) {
@@ -1047,12 +1064,29 @@ export default function App() {
         *{box-sizing:border-box;margin:0;padding:0}
         @keyframes fi{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
         @keyframes spin{to{transform:rotate(360deg)}}
-        @keyframes glow{0%{box-shadow:0 0 0 0 rgba(255,255,255,.3)}50%{box-shadow:0 0 30px 10px rgba(255,255,255,.15)}100%{box-shadow:0 0 0 0 rgba(255,255,255,0)}}
         @keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
-        .glow-pr{animation:glow 1.5s ease-out}
+        @keyframes popIn{0%{opacity:0;transform:scale(.3)}50%{transform:scale(1.15)}100%{opacity:1;transform:scale(1)}}
+        @keyframes checkPop{0%{transform:scale(0)}40%{transform:scale(1.3)}100%{transform:scale(1)}}
+        @keyframes ripple{0%{box-shadow:0 0 0 0 rgba(74,222,128,.4)}100%{box-shadow:0 0 0 14px rgba(74,222,128,0)}}
+        @keyframes goldGlow{0%{box-shadow:0 0 0 0 rgba(251,191,36,.5)}50%{box-shadow:0 0 40px 8px rgba(251,191,36,.2)}100%{box-shadow:0 0 0 0 rgba(251,191,36,0)}}
+        @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+        @keyframes confettiFall{0%{transform:translateY(0) rotate(0deg);opacity:1}100%{transform:translateY(120px) rotate(720deg);opacity:0}}
+        @keyframes forkBite{0%{transform:translateY(0) rotate(0deg)}30%{transform:translateY(-8px) rotate(-15deg)}60%{transform:translateY(4px) rotate(5deg)}100%{transform:translateY(0) rotate(0deg)}}
+        @keyframes flexPump{0%,100%{transform:scale(1)}50%{transform:scale(1.25)}}
+        @keyframes fireFlicker{0%,100%{transform:scale(1) rotate(0deg)}25%{transform:scale(1.05) rotate(-2deg)}50%{transform:scale(.97) rotate(1deg)}75%{transform:scale(1.03) rotate(-1deg)}}
+        @keyframes xpFloat{0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-40px)}}
+        @keyframes barPoke{0%{transform:translateX(-60px)}40%{transform:translateX(10px)}50%{transform:translateX(6px)}100%{transform:translateX(-60px)}}
+        @keyframes pinataBurst{0%{transform:scale(1);opacity:1}30%{transform:scale(1.2);opacity:1}100%{transform:scale(0);opacity:0}}
         .slide-up{animation:slideUp .4s ease-out both}
-        .pulse{animation:pulse .6s ease-out}
+        .pop-in{animation:popIn .5s cubic-bezier(.34,1.56,.64,1) both}
+        .check-pop{animation:checkPop .3s cubic-bezier(.34,1.56,.64,1) both}
+        .ripple-green{animation:ripple .6s ease-out}
+        .gold-glow{animation:goldGlow 1.5s ease-out}
+        .shimmer-gold{background:linear-gradient(90deg,#fbbf24 0%,#fef3c7 50%,#fbbf24 100%);background-size:200% 100%;animation:shimmer 2s linear infinite;-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+        .fire-flicker{display:inline-block;animation:fireFlicker 1.5s ease-in-out infinite}
+        .xp-float{animation:xpFloat 1.2s ease-out forwards;position:absolute;pointer-events:none}
+        .fork-bite{animation:forkBite .6s ease-out}
+        .flex-pump{animation:flexPump .5s ease-out .3s both}
         .ani{animation:fi .35s ease-out both}
         .ip{background:${sf};border:1px solid ${bd};border-radius:12px;padding:12px 14px;color:${t1};font-size:14px;font-family:inherit;outline:none;width:100%;transition:border .2s}
         .ip:focus{border-color:rgba(255,255,255,.3)}
@@ -1081,48 +1115,98 @@ export default function App() {
           ))}
         </div>
 
-        {/* ═══ PR ALERT OVERLAY ═══ */}
-        {prAlert && (
-          <div className="slide-up" style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", zIndex: 100, background: "#111", border: "1px solid rgba(255,255,255,.2)", borderRadius: 16, padding: "16px 28px", display: "flex", alignItems: "center", gap: 14, boxShadow: "0 12px 40px rgba(0,0,0,.6)", maxWidth: 400 }}>
-            <span style={{ fontSize: 32 }}>🏆</span>
+        {/* ═══ XP FLOATS ═══ */}
+        {xpFloats.map(f => (
+          <div key={f.id} className="xp-float" style={{ position: "fixed", top: 60, right: 30, zIndex: 101, fontSize: 16, fontWeight: 800, fontFamily: "'JetBrains Mono'", color: cBlue }}>+{f.amount} XP</div>
+        ))}
+
+        {/* ═══ MACROS CELEBRATION ═══ */}
+        {macrosCelebrate && (
+          <div className="pop-in" style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", zIndex: 100, background: "linear-gradient(135deg, #065f46, #064e3b)", border: `1px solid ${cGreen}40`, borderRadius: 16, padding: "14px 28px", display: "flex", alignItems: "center", gap: 14, boxShadow: `0 8px 32px ${cGreen}20`, maxWidth: 380 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span className="fork-bite" style={{ fontSize: 28 }}>🍴</span>
+              <span style={{ fontSize: 20 }}>→</span>
+              <span className="flex-pump" style={{ fontSize: 28 }}>💪</span>
+            </div>
             <div>
-              <div style={{ fontSize: 16, fontWeight: 800 }}>NEW PR!</div>
-              <div style={{ fontSize: 13, color: t2, marginTop: 2 }}>{prAlert.name}</div>
-              <div style={{ fontFamily: "'JetBrains Mono'", fontSize: 14, fontWeight: 700, marginTop: 2 }}>{prAlert.prev} → {prAlert.weight} lbs</div>
+              <div style={{ fontSize: 14, fontWeight: 800, color: cGreen }}>Protein Target Hit!</div>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,.6)", marginTop: 2 }}>Muscles are fed. Recovery mode activated.</div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══ PR ALERT — Barbell Piñata ═══ */}
+        {prAlert && (
+          <div style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+            {/* Confetti particles */}
+            {Array.from({ length: 24 }).map((_, i) => {
+              const angle = (i / 24) * 360;
+              const dist = 60 + Math.random() * 80;
+              const x = Math.cos(angle * Math.PI / 180) * dist;
+              const y = Math.sin(angle * Math.PI / 180) * dist;
+              const colors = [cGold, cOrange, "#ef4444", cGreen, cBlue, cPurple, "#fff"];
+              const color = colors[i % colors.length];
+              const size = 6 + Math.random() * 8;
+              return <div key={i} style={{ position: "absolute", width: size, height: size, borderRadius: i % 3 === 0 ? "50%" : i % 3 === 1 ? "2px" : "0", background: color, left: "50%", top: "50%", animation: `confettiFall ${0.8 + Math.random() * 0.8}s ease-out ${i * 0.02}s forwards`, transform: `translate(${x}px, ${y - 40}px)` }} />;
+            })}
+            {/* PR Card */}
+            <div className="pop-in gold-glow" style={{ background: "linear-gradient(135deg, #1a1000, #2a1800)", border: `1px solid ${cGold}50`, borderRadius: 20, padding: "24px 36px", textAlign: "center", boxShadow: `0 12px 48px ${cGold}20`, pointerEvents: "auto", position: "relative", overflow: "hidden" }}>
+              {/* Shimmer overlay */}
+              <div style={{ position: "absolute", inset: 0, background: `linear-gradient(90deg, transparent 0%, ${cGold}08 50%, transparent 100%)`, backgroundSize: "200% 100%", animation: "shimmer 2s linear infinite" }} />
+              {/* Piñata scene */}
+              <div style={{ position: "relative", height: 60, marginBottom: 12, overflow: "hidden" }}>
+                <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)", fontSize: 40, animation: "pinataBurst 1s ease-out .4s both" }}>🪅</div>
+                <svg width="80" height="20" viewBox="0 0 80 20" style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%, -50%)", animation: "barPoke 1s ease-out" }}>
+                  <rect x="0" y="6" width="10" height="8" rx="2" fill={cGold} />
+                  <rect x="12" y="3" width="6" height="14" rx="2" fill={cGold} />
+                  <rect x="19" y="8" width="42" height="4" rx="2" fill={cGold} />
+                  <rect x="62" y="3" width="6" height="14" rx="2" fill={cGold} />
+                  <rect x="70" y="6" width="10" height="8" rx="2" fill={cGold} />
+                </svg>
+              </div>
+              <div className="shimmer-gold" style={{ fontSize: 22, fontWeight: 900, letterSpacing: "-.02em" }}>NEW PERSONAL RECORD</div>
+              <div style={{ fontSize: 13, color: "rgba(255,255,255,.5)", marginTop: 6 }}>{prAlert.name}</div>
+              <div style={{ fontFamily: "'JetBrains Mono'", fontSize: 20, fontWeight: 800, marginTop: 8, color: cGold }}>
+                <span style={{ color: "rgba(255,255,255,.3)", textDecoration: "line-through", fontSize: 14, marginRight: 8 }}>{prAlert.prev}</span>
+                {prAlert.weight} lbs
+              </div>
+              <div style={{ fontSize: 11, color: cGold, marginTop: 8, fontWeight: 600 }}>+100 XP</div>
             </div>
           </div>
         )}
 
         {/* ═══ SESSION COMPLETE OVERLAY ═══ */}
         {showComplete && (
-          <div style={{ position: "fixed", inset: 0, zIndex: 99, background: "rgba(0,0,0,.85)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(8px)" }} onClick={() => setShowComplete(false)}>
-            <div className="slide-up" style={{ background: "#111", border: "1px solid rgba(255,255,255,.15)", borderRadius: 20, padding: 32, textAlign: "center", maxWidth: 380, width: "90%" }} onClick={e => e.stopPropagation()}>
-              <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
-              <h2 style={{ fontSize: 24, fontWeight: 800, marginBottom: 6 }}>Session Complete</h2>
+          <div style={{ position: "fixed", inset: 0, zIndex: 99, background: "rgba(0,0,0,.9)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(12px)" }} onClick={() => setShowComplete(false)}>
+            <div className="pop-in" style={{ background: "linear-gradient(180deg, #0a1a0a 0%, #111 100%)", border: `1px solid ${cGreen}30`, borderRadius: 24, padding: "36px 32px", textAlign: "center", maxWidth: 380, width: "90%", position: "relative", overflow: "hidden" }} onClick={e => e.stopPropagation()}>
+              {/* Subtle green glow at top */}
+              <div style={{ position: "absolute", top: -40, left: "50%", transform: "translateX(-50%)", width: 200, height: 80, background: `radial-gradient(ellipse, ${cGreen}15 0%, transparent 70%)`, pointerEvents: "none" }} />
+              <div style={{ fontSize: 56, marginBottom: 8 }}>🏋️</div>
+              <h2 style={{ fontSize: 24, fontWeight: 900, marginBottom: 4, background: `linear-gradient(135deg, ${cGreen}, #86efac)`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Session Complete</h2>
               <p style={{ fontSize: 13, color: t2, marginBottom: 20 }}>{program?.[activeDay]?.name}</p>
               {totalVolume > 0 && (
-                <div style={{ background: sf, borderRadius: 12, padding: 16, marginBottom: 12 }}>
-                  <div style={{ fontFamily: "'JetBrains Mono'", fontSize: 28, fontWeight: 800 }}>{totalVolume.toLocaleString()}</div>
-                  <div style={{ fontSize: 11, color: t3, marginTop: 2 }}>lbs total volume</div>
-                  {volumeComparison(totalVolume) && <div style={{ fontSize: 12, color: t2, marginTop: 6 }}>{volumeComparison(totalVolume)}</div>}
+                <div style={{ background: `${cGreen}08`, border: `1px solid ${cGreen}20`, borderRadius: 14, padding: 18, marginBottom: 14 }}>
+                  <div style={{ fontFamily: "'JetBrains Mono'", fontSize: 32, fontWeight: 900, color: cGreen }}>{totalVolume.toLocaleString()}</div>
+                  <div style={{ fontSize: 11, color: t3, marginTop: 4 }}>lbs total volume</div>
+                  {volumeComparison(totalVolume) && <div style={{ fontSize: 13, color: t2, marginTop: 6, fontWeight: 500 }}>{volumeComparison(totalVolume)}</div>}
                 </div>
               )}
-              <div style={{ display: "flex", gap: 12, justifyContent: "center", marginBottom: 16 }}>
-                <div style={{ textAlign: "center" }}>
-                  <div style={{ fontSize: 20, fontWeight: 800, fontFamily: "'JetBrains Mono'" }}>+60</div>
-                  <div style={{ fontSize: 10, color: t3 }}>XP earned</div>
+              <div style={{ display: "flex", gap: 8, justifyContent: "center", marginBottom: 18 }}>
+                <div style={{ flex: 1, background: `${cBlue}10`, border: `1px solid ${cBlue}20`, borderRadius: 12, padding: "12px 8px" }}>
+                  <div style={{ fontSize: 18, fontWeight: 900, fontFamily: "'JetBrains Mono'", color: cBlue }}>+60</div>
+                  <div style={{ fontSize: 9, color: t3, marginTop: 2 }}>XP</div>
                 </div>
-                <div style={{ textAlign: "center" }}>
-                  <div style={{ fontSize: 20, fontWeight: 800, fontFamily: "'JetBrains Mono'" }}>🔥 {streakCount}</div>
-                  <div style={{ fontSize: 10, color: t3 }}>day streak</div>
+                <div style={{ flex: 1, background: `${cOrange}10`, border: `1px solid ${cOrange}20`, borderRadius: 12, padding: "12px 8px" }}>
+                  <div style={{ fontSize: 18, fontWeight: 900, fontFamily: "'JetBrains Mono'", color: cOrange }}><span className="fire-flicker">🔥</span> {streakCount}</div>
+                  <div style={{ fontSize: 9, color: t3, marginTop: 2 }}>streak</div>
                 </div>
-                <div style={{ textAlign: "center" }}>
-                  <div style={{ fontSize: 20, fontWeight: 800, fontFamily: "'JetBrains Mono'" }}>Lv{level}</div>
-                  <div style={{ fontSize: 10, color: t3 }}>level</div>
+                <div style={{ flex: 1, background: `${cPurple}10`, border: `1px solid ${cPurple}20`, borderRadius: 12, padding: "12px 8px" }}>
+                  <div style={{ fontSize: 18, fontWeight: 900, fontFamily: "'JetBrains Mono'", color: cPurple }}>Lv{level}</div>
+                  <div style={{ fontSize: 9, color: t3, marginTop: 2 }}>level</div>
                 </div>
               </div>
-              {STREAK_MESSAGES[streakCount] && <div style={{ fontSize: 14, fontWeight: 600, color: t1, marginBottom: 12, padding: "8px 16px", background: sf2, borderRadius: 10 }}>{STREAK_MESSAGES[streakCount]}</div>}
-              <button onClick={() => setShowComplete(false)} style={{ background: t1, color: "#000", border: "none", borderRadius: 12, padding: "12px 32px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Done</button>
+              {STREAK_MESSAGES[streakCount] && <div style={{ fontSize: 13, fontWeight: 600, color: cOrange, marginBottom: 14, padding: "10px 16px", background: `${cOrange}08`, border: `1px solid ${cOrange}15`, borderRadius: 10 }}>{STREAK_MESSAGES[streakCount]}</div>}
+              <button onClick={() => setShowComplete(false)} style={{ background: cGreen, color: "#000", border: "none", borderRadius: 12, padding: "14px 40px", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", transition: "all .2s" }}>Done</button>
             </div>
           </div>
         )}
@@ -1137,14 +1221,14 @@ export default function App() {
 
             {/* Streak + Level bar */}
             <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
-              <div style={{ flex: 1, background: sf, border: `1px solid ${bd}`, borderRadius: 14, padding: 16, textAlign: "center" }}>
-                <div style={{ fontSize: 32, fontWeight: 800, fontFamily: "'JetBrains Mono'" }}>🔥 {streakCount}</div>
+              <div style={{ flex: 1, background: `${cOrange}06`, border: `1px solid ${cOrange}20`, borderRadius: 14, padding: 16, textAlign: "center" }}>
+                <div style={{ fontSize: 32, fontWeight: 800, fontFamily: "'JetBrains Mono'" }}><span className="fire-flicker">🔥</span> <span style={{ color: cOrange }}>{streakCount}</span></div>
                 <div style={{ fontSize: 11, color: t3, marginTop: 4 }}>day streak</div>
               </div>
-              <div style={{ flex: 1, background: sf, border: `1px solid ${bd}`, borderRadius: 14, padding: 16, textAlign: "center" }}>
-                <div style={{ fontSize: 32, fontWeight: 800, fontFamily: "'JetBrains Mono'" }}>Lv{level}</div>
-                <div style={{ height: 4, borderRadius: 2, background: "rgba(255,255,255,.06)", marginTop: 8, overflow: "hidden" }}>
-                  <div style={{ height: "100%", width: `${levelProgress * 100}%`, background: t1, borderRadius: 2, transition: "width .3s" }} />
+              <div style={{ flex: 1, background: `${cPurple}06`, border: `1px solid ${cPurple}20`, borderRadius: 14, padding: 16, textAlign: "center" }}>
+                <div style={{ fontSize: 32, fontWeight: 800, fontFamily: "'JetBrains Mono'", color: cPurple }}>Lv{level}</div>
+                <div style={{ height: 5, borderRadius: 3, background: "rgba(255,255,255,.06)", marginTop: 8, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${levelProgress * 100}%`, background: `linear-gradient(90deg, ${cPurple}, ${cBlue})`, borderRadius: 3, transition: "width .3s" }} />
                 </div>
                 <div style={{ fontSize: 10, color: t3, marginTop: 4 }}>{Math.round(levelProgress * 100)}% to Lv{level + 1}</div>
               </div>
@@ -1169,20 +1253,22 @@ export default function App() {
 
             {/* Macro Progress (if nutrition setup) */}
             {nutrition && (
-              <div style={{ background: sf, border: `1px solid ${bd}`, borderRadius: 14, padding: 16, marginBottom: 12 }}>
+              <div style={{ background: `${cGreen}04`, border: `1px solid ${cGreen}15`, borderRadius: 14, padding: 16, marginBottom: 12 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                   <span style={{ fontSize: 12, fontWeight: 600 }}>Today's Macros</span>
-                  <span style={{ fontSize: 11, color: t3, fontFamily: "'JetBrains Mono'" }}>{totals.cals} / {nutrition.cals} cal</span>
+                  <span style={{ fontSize: 11, color: totals.cals >= nutrition.cals ? cGreen : t3, fontFamily: "'JetBrains Mono'", fontWeight: totals.cals >= nutrition.cals ? 700 : 400 }}>{totals.cals} / {nutrition.cals} cal {totals.cals >= nutrition.cals ? "✓" : ""}</span>
                 </div>
-                <div style={{ height: 8, borderRadius: 4, background: "rgba(255,255,255,.04)", overflow: "hidden", marginBottom: 6 }}>
-                  <div style={{ height: "100%", width: `${Math.min((totals.cals / nutrition.cals) * 100, 100)}%`, background: t1, borderRadius: 4, transition: "width .3s" }} />
+                <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
+                  {[{ v: totals.protein, t: nutrition.protein, c: cBlue, l: "P" }, { v: totals.carbs, t: nutrition.carbs, c: cGreen, l: "C" }, { v: totals.fat, t: nutrition.fat, c: cOrange, l: "F" }].map(b => (
+                    <div key={b.l} style={{ flex: 1 }}>
+                      <div style={{ height: 6, borderRadius: 3, background: "rgba(255,255,255,.04)", overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${Math.min((b.v / b.t) * 100, 100)}%`, background: b.c, borderRadius: 3, transition: "width .4s ease-out" }} />
+                      </div>
+                      <div style={{ fontSize: 9, color: b.v >= b.t ? b.c : t3, marginTop: 3, textAlign: "center", fontFamily: "'JetBrains Mono'", fontWeight: b.v >= b.t ? 700 : 400 }}>{b.v}/{b.t}{b.l}</div>
+                    </div>
+                  ))}
                 </div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: t3 }}>
-                  <span>{totals.protein}/{nutrition.protein}g P</span>
-                  <span>{totals.carbs}/{nutrition.carbs}g C</span>
-                  <span>{totals.fat}/{nutrition.fat}g F</span>
-                </div>
-                {foodLog.length === 0 && <div style={{ textAlign: "center", marginTop: 10 }}><button onClick={() => setPage("nutrition")} style={{ background: sf2, border: `1px solid ${bd}`, borderRadius: 8, padding: "6px 16px", fontSize: 11, color: t2, cursor: "pointer", fontFamily: "inherit" }}>Log Food →</button></div>}
+                {foodLog.length === 0 && <div style={{ textAlign: "center", marginTop: 8 }}><button onClick={() => setPage("nutrition")} style={{ background: `${cGreen}15`, border: `1px solid ${cGreen}25`, borderRadius: 8, padding: "8px 20px", fontSize: 11, color: cGreen, cursor: "pointer", fontFamily: "inherit", fontWeight: 600 }}>Log Food →</button></div>}
               </div>
             )}
 
@@ -1194,12 +1280,12 @@ export default function App() {
 
             {/* PR Board Preview */}
             {Object.keys(prs).length > 0 && (
-              <div style={{ background: sf, border: `1px solid ${bd}`, borderRadius: 14, padding: 16 }}>
-                <div style={{ fontSize: 10, fontWeight: 600, color: t3, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>🏆 Personal Records</div>
+              <div style={{ background: `${cGold}04`, border: `1px solid ${cGold}15`, borderRadius: 14, padding: 16 }}>
+                <div style={{ fontSize: 10, fontWeight: 600, color: cGold, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>🏆 Personal Records</div>
                 {Object.entries(prs).slice(0, 5).map(([name, weight]) => (
-                  <div key={name} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,.03)", fontSize: 12 }}>
+                  <div key={name} style={{ display: "flex", justifyContent: "space-between", padding: "7px 0", borderBottom: `1px solid ${cGold}08`, fontSize: 12 }}>
                     <span style={{ color: t2 }}>{name.split("(")[0].trim()}</span>
-                    <span style={{ fontFamily: "'JetBrains Mono'", fontWeight: 700 }}>{weight} lbs</span>
+                    <span style={{ fontFamily: "'JetBrains Mono'", fontWeight: 700, color: cGold }}>{weight} lbs</span>
                   </div>
                 ))}
                 {Object.keys(prs).length > 5 && <div style={{ fontSize: 10, color: t3, textAlign: "center", marginTop: 6 }}>+{Object.keys(prs).length - 5} more</div>}
@@ -1295,7 +1381,7 @@ export default function App() {
                   <div key={i} style={{ padding: "14px 0", borderBottom: `1px solid rgba(255,255,255,.05)`, opacity: done ? 0.3 : 1, transition: "opacity .2s" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                       {/* Check */}
-                      <div onClick={() => togChkHooked(i)} style={{ width: 22, height: 22, borderRadius: "50%", border: `1.5px solid ${done ? t1 : "rgba(255,255,255,.15)"}`, background: done ? t1 : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 10, color: "#000", flexShrink: 0, transition: "all .2s" }}>{done && "✓"}</div>
+                      <div onClick={() => togChkHooked(i)} className={done ? "check-pop ripple-green" : ""} style={{ width: 24, height: 24, borderRadius: "50%", border: `2px solid ${done ? cGreen : "rgba(255,255,255,.12)"}`, background: done ? cGreen : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 11, color: "#000", flexShrink: 0, transition: "all .25s", fontWeight: 700 }}>{done && "✓"}</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                           <span style={{ fontSize: 14, fontWeight: 500, textDecoration: done ? "line-through" : "none" }}>{ex.name}</span>
