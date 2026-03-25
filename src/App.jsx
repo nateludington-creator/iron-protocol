@@ -688,6 +688,18 @@ export default function App() {
                     <div>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         <span style={{ fontSize: 14, fontWeight: 500, textDecoration: done ? "line-through" : "none" }}>{ex.name}</span>
+                        <a
+                          href={`https://www.youtube.com/results?search_query=${encodeURIComponent(ex.name + " exercise form short")}&sp=EgIYAQ%3D%3D`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 6, background: "rgba(255,0,0,.08)", border: "1px solid rgba(255,0,0,.15)", color: "#ff4444", fontSize: 10, fontWeight: 600, textDecoration: "none", cursor: "pointer", transition: "all .2s", whiteSpace: "nowrap" }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,0,0,.15)"; e.currentTarget.style.transform = "translateY(-1px)"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(255,0,0,.08)"; e.currentTarget.style.transform = "none"; }}
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M23.5 6.2c-.3-1-1-1.8-2-2C19.6 3.7 12 3.7 12 3.7s-7.6 0-9.5.5c-1 .3-1.8 1-2 2C0 8.1 0 12 0 12s0 3.9.5 5.8c.3 1 1 1.8 2 2 1.9.5 9.5.5 9.5.5s7.6 0 9.5-.5c1-.3 1.8-1 2-2 .5-1.9.5-5.8.5-5.8s0-3.9-.5-5.8zM9.5 15.6V8.4l6.3 3.6-6.3 3.6z"/></svg>
+                          Video
+                        </a>
                         <span className="tg" style={{ background: `${MC[ex.muscle] || "#666"}18`, color: MC[ex.muscle] || "#888" }}>{ex.muscle.replace(/_/g, " ")}</span>
                       </div>
                       <div style={{ display: "flex", gap: 3, marginTop: 4, flexWrap: "wrap" }}>
