@@ -404,27 +404,46 @@ const CUT_FOODS = [
 function haversine(a1, o1, a2, o2) { const R = 3959, dL = ((a2-a1)*Math.PI)/180, dO = ((o2-o1)*Math.PI)/180; const x = Math.sin(dL/2)**2 + Math.cos(a1*Math.PI/180)*Math.cos(a2*Math.PI/180)*Math.sin(dO/2)**2; return R*2*Math.atan2(Math.sqrt(x), Math.sqrt(1-x)); }
 async function geocodeLocation(q) { const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1&countrycodes=us`, { headers: { "User-Agent": "IronProtocol/1.0" } }); const d = await r.json(); return d.length ? { lat: parseFloat(d[0].lat), lon: parseFloat(d[0].lon), display: d[0].display_name } : null; }
 async function findRealStores(lat, lon) { const q = `[out:json][timeout:12];(node["shop"="supermarket"](around:8000,${lat},${lon});node["shop"="grocery"](around:8000,${lat},${lon}););out body;`; const r = await fetch("https://overpass-api.de/api/interpreter", { method: "POST", body: `data=${encodeURIComponent(q)}` }); const d = await r.json(); return d.elements.filter(e => e.tags?.name).map(e => ({ name: e.tags.name, brand: e.tags.brand || "", dist: haversine(lat, lon, e.lat, e.lon) })).sort((a, b) => a.dist - b.dist).slice(0, 10); }
-async function searchFood(query, ninjaKey) {
+async function searchFood(query) {
   if (!query || query.length < 2) return [];
-  // CalorieNinjas API — natural language food search (handles "bowl of ice cream", "grilled chicken 6oz", etc.)
-  if (ninjaKey) {
-    try {
-      const r = await fetch(`https://api.calorieninjas.com/v1/nutrition?query=${encodeURIComponent(query)}`, { headers: { "X-Api-Key": ninjaKey } });
-      const d = await r.json();
-      return (d.items || []).map(f => ({
-        name: f.name.charAt(0).toUpperCase() + f.name.slice(1),
-        cals: Math.round(f.calories || 0),
-        protein: Math.round(f.protein_g || 0),
-        carbs: Math.round(f.carbohydrates_total_g || 0),
-        fat: Math.round(f.fat_total_g || 0),
-        serving: `${f.serving_size_g || 100}g`,
-      }));
-    } catch { /* fall through to USDA */ }
-  }
-  // Fallback: USDA (less accurate for common foods)
-  const r = await fetch(`https://api.nal.usda.gov/fdc/v1/foods/search?api_key=DEMO_KEY&query=${encodeURIComponent(query)}&pageSize=6&dataType=Survey%20(FNDDS)`);
-  const d = await r.json();
-  return (d.foods || []).map(f => { const g = id => { const n = (f.foodNutrients || []).find(n => n.nutrientId === id); return n ? Math.round(n.value) : 0; }; return { name: f.description, cals: g(1008), protein: g(1003), carbs: g(1005), fat: g(1004), serving: f.servingSize ? `${f.servingSize}${f.servingSizeUnit || "g"}` : "100g" }; });
+  const results = [];
+
+  // Open Food Facts — completely free, no API key, 3M+ products
+  try {
+    const r = await fetch(`https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=10&fields=product_name,brands,nutriments,serving_size`, { headers: { "User-Agent": "IronProtocol/1.0" } });
+    const d = await r.json();
+    for (const p of (d.products || [])) {
+      if (!p.product_name || !p.nutriments) continue;
+      const n = p.nutriments;
+      const cals = Math.round(n["energy-kcal_100g"] || n["energy-kcal"] || 0);
+      if (cals === 0) continue;
+      results.push({
+        name: p.brands ? `${p.product_name} — ${p.brands}` : p.product_name,
+        cals,
+        protein: Math.round(n.proteins_100g || n.proteins || 0),
+        carbs: Math.round(n.carbohydrates_100g || n.carbohydrates || 0),
+        fat: Math.round(n.fat_100g || n.fat || 0),
+        serving: p.serving_size || "100g",
+      });
+    }
+  } catch { /* continue to USDA fallback */ }
+
+  // Also query USDA for generic/whole foods (chicken breast, rice, etc.)
+  try {
+    const r2 = await fetch(`https://api.nal.usda.gov/fdc/v1/foods/search?api_key=DEMO_KEY&query=${encodeURIComponent(query)}&pageSize=4&dataType=Survey%20(FNDDS)`);
+    const d2 = await r2.json();
+    for (const f of (d2.foods || [])) {
+      const g = id => { const n = (f.foodNutrients || []).find(n => n.nutrientId === id); return n ? Math.round(n.value) : 0; };
+      const cals = g(1008);
+      if (cals === 0) continue;
+      // Skip if we already have a similar name from Open Food Facts
+      const nameLower = f.description.toLowerCase();
+      if (results.some(r => r.name.toLowerCase().includes(nameLower.slice(0, 10)))) continue;
+      results.push({ name: f.description, cals, protein: g(1003), carbs: g(1005), fat: g(1004), serving: f.servingSize ? `${f.servingSize}${f.servingSizeUnit || "g"}` : "100g" });
+    }
+  } catch { /* ignore */ }
+
+  return results.slice(0, 10);
 }
 async function analyzePhoto(b64, key) { const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contents: [{ parts: [{ text: 'Identify this food. Estimate macros. Return ONLY JSON: {"name":"food","cals":0,"protein":0,"carbs":0,"fat":0}' }, { inlineData: { mimeType: "image/jpeg", data: b64.split(",")[1] } }] }] }) }); const d = await r.json(); const m = d?.candidates?.[0]?.content?.parts?.[0]?.text?.match(/\{[\s\S]*?\}/); return m ? JSON.parse(m[0]) : null; }
 
@@ -520,7 +539,6 @@ export default function App() {
   const [photoAnalyzing, setPhotoAnalyzing] = useState(false);
   const [photoResult, setPhotoResult] = useState(null);
   const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem("ip_gemini") || "");
-  const [ninjaKey, setNinjaKey] = useState(() => localStorage.getItem("ip_ninja") || "");
   const [showApiSetup, setShowApiSetup] = useState(false);
   const photoRef = useRef(null);
   const searchTimer = useRef(null);
@@ -589,7 +607,7 @@ export default function App() {
   };
 
   // Food search (debounced)
-  useEffect(() => { clearTimeout(searchTimer.current); if (foodSearch.length >= 2) searchTimer.current = setTimeout(async () => { setSearchLoading(true); try { setFoodResults(await searchFood(foodSearch, ninjaKey)); } catch { setFoodResults([]); } setSearchLoading(false); }, 400); else setFoodResults([]); return () => clearTimeout(searchTimer.current); }, [foodSearch, ninjaKey]);
+  useEffect(() => { clearTimeout(searchTimer.current); if (foodSearch.length >= 2) searchTimer.current = setTimeout(async () => { setSearchLoading(true); try { setFoodResults(await searchFood(foodSearch)); } catch { setFoodResults([]); } setSearchLoading(false); }, 600); else setFoodResults([]); return () => clearTimeout(searchTimer.current); }, [foodSearch]);
 
   // Photo
   const handlePhoto = (e) => { const f = e.target.files?.[0]; if (!f) return; const r = new FileReader(); r.onload = (ev) => { setPhotoPreview(ev.target.result); setPhotoResult(null); }; r.readAsDataURL(f); };
@@ -897,42 +915,27 @@ export default function App() {
             <div style={{ background: sf, border: `1px solid ${bd}`, borderRadius: 14, padding: 16, marginBottom: 12 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                 <span style={{ fontSize: 14, fontWeight: 600 }}>Daily Tracker</span>
-                <button onClick={() => setShowApiSetup(!showApiSetup)} style={{ background: sf, border: `1px solid ${bd}`, borderRadius: 8, padding: "4px 10px", fontSize: 10, color: ninjaKey && geminiKey ? t2 : t3, cursor: "pointer", fontFamily: "inherit" }}>{ninjaKey && geminiKey ? "🔑 ✓" : "🔑 Setup"}</button>
+                {!geminiKey && <button onClick={() => setShowApiSetup(!showApiSetup)} style={{ background: sf, border: `1px solid ${bd}`, borderRadius: 8, padding: "4px 10px", fontSize: 10, color: t3, cursor: "pointer", fontFamily: "inherit" }}>📷 Setup</button>}
+                {geminiKey && <button onClick={() => setShowApiSetup(!showApiSetup)} style={{ background: sf, border: `1px solid ${bd}`, borderRadius: 8, padding: "4px 10px", fontSize: 10, color: t2, cursor: "pointer", fontFamily: "inherit" }}>📷 ✓</button>}
               </div>
 
-              {/* API Keys */}
+              {/* Gemini API Key (only needed for photo AI) */}
               {showApiSetup && (
                 <div style={{ background: sf2, borderRadius: 10, padding: 14, marginBottom: 10 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Food Search — CalorieNinjas</div>
-                  <p style={{ fontSize: 11, color: t3, marginBottom: 6 }}>Free at <a href="https://calorieninjas.com/api" target="_blank" rel="noopener noreferrer" style={{ color: t1, textDecoration: "underline" }}>calorieninjas.com/api</a> — handles natural language like "bowl of ice cream"</p>
-                  <input className="ip" type="password" placeholder="CalorieNinjas API key..." value={ninjaKey} onChange={e => { setNinjaKey(e.target.value); localStorage.setItem("ip_ninja", e.target.value); }} style={{ fontSize: 12, marginBottom: 10 }} />
-                  {ninjaKey && <div style={{ fontSize: 10, color: t2, marginBottom: 10 }}>✓ Food search powered by CalorieNinjas</div>}
-                  {!ninjaKey && <div style={{ fontSize: 10, color: t3, marginBottom: 10 }}>Without key, falls back to USDA (limited)</div>}
-
-                  <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4, paddingTop: 10, borderTop: `1px solid ${bd}` }}>Photo AI — Gemini</div>
-                  <p style={{ fontSize: 11, color: t3, marginBottom: 6 }}>Free at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" style={{ color: t1, textDecoration: "underline" }}>aistudio.google.com/apikey</a></p>
-                  <input className="ip" type="password" placeholder="Gemini API key..." value={geminiKey} onChange={e => { setGeminiKey(e.target.value); localStorage.setItem("ip_gemini", e.target.value); }} style={{ fontSize: 12, marginBottom: 8 }} />
-
-                  <button onClick={() => setShowApiSetup(false)} style={{ width: "100%", background: t1, color: "#000", border: "none", borderRadius: 10, padding: "10px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Done</button>
-                </div>
-              )}
-
-              {/* No API key banner */}
-              {!ninjaKey && !showApiSetup && (
-                <div onClick={() => setShowApiSetup(true)} style={{ background: sf2, border: `1px solid ${bd}`, borderRadius: 10, padding: "10px 14px", marginBottom: 8, cursor: "pointer", display: "flex", alignItems: "center", gap: 10, transition: "all .15s" }} onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(255,255,255,.2)"} onMouseLeave={e => e.currentTarget.style.borderColor = bd}>
-                  <span style={{ fontSize: 16 }}>🔑</span>
-                  <div>
-                    <div style={{ fontSize: 12, fontWeight: 600 }}>Set up API keys for best experience</div>
-                    <div style={{ fontSize: 11, color: t3 }}>CalorieNinjas for food search · Gemini for photo AI — both free</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Photo AI — Gemini (optional)</div>
+                  <p style={{ fontSize: 11, color: t3, marginBottom: 6 }}>Free at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" style={{ color: t1, textDecoration: "underline" }}>aistudio.google.com/apikey</a> — only needed if you want to snap food photos</p>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <input className="ip" type="password" placeholder="Gemini API key..." value={geminiKey} onChange={e => { setGeminiKey(e.target.value); localStorage.setItem("ip_gemini", e.target.value); }} style={{ fontSize: 12 }} />
+                    <button onClick={() => setShowApiSetup(false)} style={{ background: t1, color: "#000", border: "none", borderRadius: 10, padding: "8px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Done</button>
                   </div>
-                  <span style={{ marginLeft: "auto", color: t3 }}>→</span>
+                  <p style={{ fontSize: 10, color: t3, marginTop: 6 }}>Food search works automatically — no key needed.</p>
                 </div>
               )}
 
               {/* Search + buttons */}
               <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
                 <div style={{ flex: 1, position: "relative" }}>
-                  <input className="ip" style={{ paddingLeft: 32 }} placeholder={ninjaKey ? "Search any food... (e.g. bowl of ice cream)" : "Search food (basic — add API key for better results)"} value={foodSearch} onChange={e => setFoodSearch(e.target.value)} />
+                  <input className="ip" style={{ paddingLeft: 32 }} placeholder="Search any food... (ice cream, chicken breast, pizza)" value={foodSearch} onChange={e => setFoodSearch(e.target.value)} />
                   <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 13, opacity: 0.3 }}>🔍</span>
                   {searchLoading && <span className="spinner" style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", width: 14, height: 14 }} />}
                   {foodResults.length > 0 && (
