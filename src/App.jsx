@@ -685,6 +685,59 @@ const BarbellLogo = () => (
 );
 
 /* ═══════════════════════════════════════════════════════════════
+   HOOKED FRAMEWORK — Trigger, Action, Variable Reward, Investment
+   ═══════════════════════════════════════════════════════════════ */
+const DAILY_TIPS = [
+  "Protein before bed: casein digests slowly, feeding muscles while you sleep.",
+  "Deload weeks aren't weakness — they're when adaptation actually happens.",
+  "Track your sleep. 7-9 hours = 20% better strength gains than <6 hours.",
+  "The last 2 reps before failure drive ~80% of the hypertrophy stimulus.",
+  "Creatine is the most researched supplement. 5g daily. No loading needed.",
+  "Stretch between sets of the opposing muscle group to boost performance.",
+  "Water: drink half your bodyweight (lbs) in ounces. Dehydration kills performance.",
+  "Progressive overload doesn't always mean more weight — more reps counts too.",
+  "Your muscles grow during rest, not during the workout. Recovery is training.",
+  "Protein timing matters less than total daily intake. Hit your target, period.",
+  "Mind-muscle connection on isolation exercises can increase muscle activation 20%.",
+  "Walking 8,000+ steps daily improves recovery and helps with body composition.",
+  "Caffeine 30 min before training boosts strength output by 3-5%.",
+  "Eccentric (lowering) phase builds more muscle. Control the negative.",
+  "Training a muscle 2x/week produces more growth than 1x at the same volume.",
+  "Soreness ≠ growth. Don't chase DOMS — chase progressive overload.",
+  "Your grip will fail before your back. Use straps on heavy pulls.",
+  "Warming up with lighter sets reduces injury risk by 50%+.",
+  "High-protein breakfast reduces total daily calorie intake by ~400 cals.",
+  "Consistency beats perfection. 80% adherence long-term > 100% for 3 weeks.",
+  "Carbs before training = better performance. Don't fear pre-workout carbs.",
+  "Full range of motion beats partial reps for hypertrophy in most exercises.",
+  "Stress and poor sleep raise cortisol, which directly blocks muscle growth.",
+  "Take progress photos monthly. The mirror lies, photos don't.",
+  "1g of protein per pound of bodyweight is the sweet spot for muscle gain.",
+  "Rest 2-3 minutes between heavy compounds, 60-90s between isolation.",
+  "Your body adapts to exercises after ~6 weeks. That's why we periodize.",
+  "Fiber helps you feel full on a cut. Aim for 25-35g daily from veggies.",
+  "Don't compare your Week 1 to someone's Year 5. Stay in your own lane.",
+  "The best workout program is the one you actually stick to. Consistency wins.",
+];
+
+const LEVEL_THRESHOLDS = [0, 100, 300, 600, 1000, 1500, 2200, 3000, 4000, 5500, 7500, 10000];
+function getLevel(xp) { for (let i = LEVEL_THRESHOLDS.length - 1; i >= 0; i--) { if (xp >= LEVEL_THRESHOLDS[i]) return i + 1; } return 1; }
+function getLevelProgress(xp) { const lv = getLevel(xp); const curr = LEVEL_THRESHOLDS[lv - 1] || 0; const next = LEVEL_THRESHOLDS[lv] || curr + 500; return (xp - curr) / (next - curr); }
+function getTimeGreeting() { const h = new Date().getHours(); return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"; }
+function getTodayStr() { return new Date().toISOString().split("T")[0]; }
+
+const STREAK_MESSAGES = { 7: "One week strong!", 14: "Two weeks of discipline!", 30: "30 days. You're built different.", 60: "60-day warrior.", 90: "90 days. This is who you are now.", 180: "Half a year. Unstoppable.", 365: "One full year. Legend." };
+
+// Fun volume comparisons
+function volumeComparison(totalLbs) {
+  if (totalLbs < 1000) return null;
+  const civics = (totalLbs / 2800).toFixed(1);
+  const elephants = (totalLbs / 13000).toFixed(2);
+  if (totalLbs > 10000) return `That's ${elephants} elephants.`;
+  return `That's ${civics} Honda Civics.`;
+}
+
+/* ═══════════════════════════════════════════════════════════════
    MAIN APP — Apple-inspired monochrome design
    ═══════════════════════════════════════════════════════════════ */
 export default function App() {
@@ -694,7 +747,7 @@ export default function App() {
   const [newName, setNewName] = useState("");
 
   // Core state
-  const [page, setPage] = useState("training");
+  const [page, setPage] = useState("home");
   const [step, setStep] = useState(0);
   const [equip, setEquip] = useState(new Set());
   const [splitId, setSplitId] = useState(null);
@@ -705,6 +758,16 @@ export default function App() {
   const [logs, setLogs] = useState({});
   const [swapIdx, setSwapIdx] = useState(null);
   const [vidIdx, setVidIdx] = useState(null);
+
+  // Hooked framework state
+  const [streakCount, setStreakCount] = useState(0);
+  const [lastActiveDate, setLastActiveDate] = useState("");
+  const [xp, setXp] = useState(0);
+  const [prs, setPrs] = useState({});
+  const [prAlert, setPrAlert] = useState(null);
+  const [showComplete, setShowComplete] = useState(false);
+  const [dailyTipIdx, setDailyTipIdx] = useState(0);
+  const [rotationIndex, setRotationIndex] = useState(0);
 
   // Nutrition
   const [nGoal, setNGoal] = useState(null);
@@ -761,6 +824,12 @@ export default function App() {
       if (d.nSetup) setNSetup(d.nSetup);
       if (d.weekCheckins) setWeekCheckins(d.weekCheckins);
       if (d.foodLog) setFoodLog(d.foodLog);
+      if (d.streakCount) setStreakCount(d.streakCount);
+      if (d.lastActiveDate) setLastActiveDate(d.lastActiveDate);
+      if (d.xp) setXp(d.xp);
+      if (d.prs) setPrs(d.prs);
+      if (d.dailyTipIdx !== undefined) setDailyTipIdx(d.dailyTipIdx);
+      if (d.rotationIndex !== undefined) setRotationIndex(d.rotationIndex);
     }
   }, [profileId]);
 
@@ -770,7 +839,7 @@ export default function App() {
     if (!profileId) return;
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      saveProfileData(profileId, { equip: [...equip], splitId, program, step, logs, checked: [...checked], nGoal, nWeight, nHeight, nSetup, weekCheckins, foodLog });
+      saveProfileData(profileId, { equip: [...equip], splitId, program, step, logs, checked: [...checked], nGoal, nWeight, nHeight, nSetup, weekCheckins, foodLog, streakCount, lastActiveDate, xp, prs, dailyTipIdx, rotationIndex });
     }, 500);
   }, [profileId, equip, splitId, program, step, logs, checked, nGoal, nWeight, nHeight, nSetup, weekCheckins, foodLog]);
 
@@ -790,14 +859,113 @@ export default function App() {
   const doCheckin = () => { if (!checkinWt) return; const prev = weekCheckins.length > 0 ? weekCheckins[weekCheckins.length - 1].weight : Number(nWeight); setWeekCheckins(p => [...p, { weight: Number(checkinWt), delta: Number(checkinWt) - prev }]); setCheckinWt(""); };
   const addFood = (entry) => setFoodLog(p => [...p, { ...entry, id: Date.now(), time: new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) }]);
   const removeFood = (id) => setFoodLog(p => p.filter(f => f.id !== id));
-  const handleQuickAdd = () => { if (!qCals && !qP && !qC && !qF) return; addFood({ name: qName || "Quick Add", cals: Number(qCals) || 0, protein: Number(qP) || 0, carbs: Number(qC) || 0, fat: Number(qF) || 0, source: "quick" }); setQName(""); setQCals(""); setQP(""); setQC(""); setQF(""); setShowQuickAdd(false); };
+  const handleQuickAdd = () => { if (!qCals && !qP && !qC && !qF) return; addFoodHooked({ name: qName || "Quick Add", cals: Number(qCals) || 0, protein: Number(qP) || 0, carbs: Number(qC) || 0, fat: Number(qF) || 0, source: "quick" }); setQName(""); setQCals(""); setQP(""); setQC(""); setQF(""); setShowQuickAdd(false); };
 
   const doSwap = (dayIdx, exIdx, newEx) => {
     setProgram(p => p.map((d, di) => di === dayIdx ? { ...d, exercises: d.exercises.map((e, ei) => ei === exIdx ? { ...newEx, muscle: e.muscle } : e) } : d));
     setSwapIdx(null);
   };
 
-  // Food search (debounced)
+  // ─── HOOKED FRAMEWORK LOGIC ───
+
+  // Streak: update on any activity
+  const updateStreak = useCallback(() => {
+    const today = getTodayStr();
+    if (lastActiveDate === today) return; // already logged today
+    const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+    const yStr = yesterday.toISOString().split("T")[0];
+    if (lastActiveDate === yStr) { setStreakCount(s => s + 1); } // consecutive
+    else if (lastActiveDate && lastActiveDate !== today) { setStreakCount(1); } // gap — reset
+    else if (!lastActiveDate) { setStreakCount(1); } // first ever
+    setLastActiveDate(today);
+  }, [lastActiveDate]);
+
+  // XP gain
+  const gainXp = useCallback((amount) => { setXp(x => x + amount); }, []);
+
+  // PR detection — called when logging weight
+  const checkPR = useCallback((exName, weight) => {
+    const w = Number(weight);
+    if (!w || w <= 0) return;
+    const prev = prs[exName] || 0;
+    if (w > prev) {
+      setPrs(p => ({ ...p, [exName]: w }));
+      if (prev > 0) { // only celebrate if they had a previous record
+        setPrAlert({ name: exName, weight: w, prev });
+        gainXp(100);
+        setTimeout(() => setPrAlert(null), 4000);
+      }
+    }
+  }, [prs, gainXp]);
+
+  // Enhanced logW with PR check
+  const logWHooked = (ei, si, v) => {
+    logW(ei, si, v);
+    if (si === 0 && v && program?.[activeDay]?.exercises?.[ei]) {
+      checkPR(program[activeDay].exercises[ei].name, v);
+    }
+  };
+
+  // Enhanced togChk with XP + streak + session complete
+  const togChkHooked = (i) => {
+    const k = `${activeWeek}-${activeDay}-${i}`;
+    const wasChecked = checked.has(k);
+    togChk(i);
+    if (!wasChecked) {
+      gainXp(10);
+      updateStreak();
+      // Check if session is now complete
+      const exCount = program?.[activeDay]?.exercises?.length || 5;
+      const doneCount = [...checked].filter(c => c.startsWith(`${activeWeek}-${activeDay}-`)).length + 1;
+      if (doneCount >= exCount) {
+        setShowComplete(true);
+        gainXp(50);
+        // Auto-advance rotation
+        setRotationIndex(r => (r + 1) % (program?.length || 1));
+      }
+    }
+  };
+
+  // Enhanced addFood with streak
+  const addFoodHooked = (entry) => {
+    addFood(entry);
+    gainXp(5);
+    updateStreak();
+  };
+
+  // Advance daily tip on mount
+  useEffect(() => {
+    if (profileId) {
+      const today = getTodayStr();
+      const tipKey = `ip_tip_${profileId}_${today}`;
+      if (!localStorage.getItem(tipKey)) {
+        setDailyTipIdx(i => (i + 1) % DAILY_TIPS.length);
+        localStorage.setItem(tipKey, "1");
+      }
+    }
+  }, [profileId]);
+
+  // Computed values
+  const level = getLevel(xp);
+  const levelProgress = getLevelProgress(xp);
+  const todaySessionsDone = program ? program.reduce((count, d, di) => {
+    const allDone = d.exercises?.every((_, ei) => checked.has(`${activeWeek}-${di}-${ei}`));
+    return count + (allDone ? 1 : 0);
+  }, 0) : 0;
+  const totalVolume = useMemo(() => {
+    if (!program?.[activeDay]) return 0;
+    return program[activeDay].exercises.reduce((vol, _, ei) => {
+      let exVol = 0;
+      for (let si = 0; si < (WEEK_PROTOCOL[activeWeek]?.sets || 0); si++) {
+        const w = Number(logs[`${activeWeek}-${activeDay}-${ei}-${si}`] || 0);
+        const r = PROTOCOL_DETAIL[activeWeek]?.[si]?.reps || 0;
+        exVol += w * r;
+      }
+      return vol + exVol;
+    }, 0);
+  }, [program, activeDay, activeWeek, logs]);
+
+  // Food search
   useEffect(() => { if (foodSearch.length >= 2) { setFoodResults(searchFood(foodSearch)); } else { setFoodResults([]); } }, [foodSearch]);
 
   // Photo
@@ -879,6 +1047,12 @@ export default function App() {
         *{box-sizing:border-box;margin:0;padding:0}
         @keyframes fi{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
         @keyframes spin{to{transform:rotate(360deg)}}
+        @keyframes glow{0%{box-shadow:0 0 0 0 rgba(255,255,255,.3)}50%{box-shadow:0 0 30px 10px rgba(255,255,255,.15)}100%{box-shadow:0 0 0 0 rgba(255,255,255,0)}}
+        @keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+        .glow-pr{animation:glow 1.5s ease-out}
+        .slide-up{animation:slideUp .4s ease-out both}
+        .pulse{animation:pulse .6s ease-out}
         .ani{animation:fi .35s ease-out both}
         .ip{background:${sf};border:1px solid ${bd};border-radius:12px;padding:12px 14px;color:${t1};font-size:14px;font-family:inherit;outline:none;width:100%;transition:border .2s}
         .ip:focus{border-color:rgba(255,255,255,.3)}
@@ -902,10 +1076,137 @@ export default function App() {
 
         {/* ═══ NAV ═══ */}
         <div style={{ display: "flex", gap: 4, padding: "12px 0 28px" }}>
-          {["training", "nutrition", "food"].map((n) => (
+          {["home", "training", "nutrition", "food"].map((n) => (
             <button key={n} onClick={() => setPage(n)} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: "none", fontSize: 12, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer", fontFamily: "inherit", transition: "all .2s", background: page === n ? t1 : sf, color: page === n ? "#000" : t3 }}>{n}</button>
           ))}
         </div>
+
+        {/* ═══ PR ALERT OVERLAY ═══ */}
+        {prAlert && (
+          <div className="slide-up" style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", zIndex: 100, background: "#111", border: "1px solid rgba(255,255,255,.2)", borderRadius: 16, padding: "16px 28px", display: "flex", alignItems: "center", gap: 14, boxShadow: "0 12px 40px rgba(0,0,0,.6)", maxWidth: 400 }}>
+            <span style={{ fontSize: 32 }}>🏆</span>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 800 }}>NEW PR!</div>
+              <div style={{ fontSize: 13, color: t2, marginTop: 2 }}>{prAlert.name}</div>
+              <div style={{ fontFamily: "'JetBrains Mono'", fontSize: 14, fontWeight: 700, marginTop: 2 }}>{prAlert.prev} → {prAlert.weight} lbs</div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══ SESSION COMPLETE OVERLAY ═══ */}
+        {showComplete && (
+          <div style={{ position: "fixed", inset: 0, zIndex: 99, background: "rgba(0,0,0,.85)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(8px)" }} onClick={() => setShowComplete(false)}>
+            <div className="slide-up" style={{ background: "#111", border: "1px solid rgba(255,255,255,.15)", borderRadius: 20, padding: 32, textAlign: "center", maxWidth: 380, width: "90%" }} onClick={e => e.stopPropagation()}>
+              <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
+              <h2 style={{ fontSize: 24, fontWeight: 800, marginBottom: 6 }}>Session Complete</h2>
+              <p style={{ fontSize: 13, color: t2, marginBottom: 20 }}>{program?.[activeDay]?.name}</p>
+              {totalVolume > 0 && (
+                <div style={{ background: sf, borderRadius: 12, padding: 16, marginBottom: 12 }}>
+                  <div style={{ fontFamily: "'JetBrains Mono'", fontSize: 28, fontWeight: 800 }}>{totalVolume.toLocaleString()}</div>
+                  <div style={{ fontSize: 11, color: t3, marginTop: 2 }}>lbs total volume</div>
+                  {volumeComparison(totalVolume) && <div style={{ fontSize: 12, color: t2, marginTop: 6 }}>{volumeComparison(totalVolume)}</div>}
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 12, justifyContent: "center", marginBottom: 16 }}>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 20, fontWeight: 800, fontFamily: "'JetBrains Mono'" }}>+60</div>
+                  <div style={{ fontSize: 10, color: t3 }}>XP earned</div>
+                </div>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 20, fontWeight: 800, fontFamily: "'JetBrains Mono'" }}>🔥 {streakCount}</div>
+                  <div style={{ fontSize: 10, color: t3 }}>day streak</div>
+                </div>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontSize: 20, fontWeight: 800, fontFamily: "'JetBrains Mono'" }}>Lv{level}</div>
+                  <div style={{ fontSize: 10, color: t3 }}>level</div>
+                </div>
+              </div>
+              {STREAK_MESSAGES[streakCount] && <div style={{ fontSize: 14, fontWeight: 600, color: t1, marginBottom: 12, padding: "8px 16px", background: sf2, borderRadius: 10 }}>{STREAK_MESSAGES[streakCount]}</div>}
+              <button onClick={() => setShowComplete(false)} style={{ background: t1, color: "#000", border: "none", borderRadius: 12, padding: "12px 32px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Done</button>
+            </div>
+          </div>
+        )}
+
+        {/* ═══ HOME DASHBOARD ═══ */}
+        {page === "home" && (
+          <div className="ani">
+            <div style={{ marginBottom: 24 }}>
+              <h2 style={{ fontSize: 26, fontWeight: 800, letterSpacing: "-.03em" }}>{getTimeGreeting()}, {profileName}</h2>
+              <p style={{ fontSize: 13, color: t3, marginTop: 4 }}>Level {level} · {xp} XP</p>
+            </div>
+
+            {/* Streak + Level bar */}
+            <div style={{ display: "flex", gap: 10, marginBottom: 16 }}>
+              <div style={{ flex: 1, background: sf, border: `1px solid ${bd}`, borderRadius: 14, padding: 16, textAlign: "center" }}>
+                <div style={{ fontSize: 32, fontWeight: 800, fontFamily: "'JetBrains Mono'" }}>🔥 {streakCount}</div>
+                <div style={{ fontSize: 11, color: t3, marginTop: 4 }}>day streak</div>
+              </div>
+              <div style={{ flex: 1, background: sf, border: `1px solid ${bd}`, borderRadius: 14, padding: 16, textAlign: "center" }}>
+                <div style={{ fontSize: 32, fontWeight: 800, fontFamily: "'JetBrains Mono'" }}>Lv{level}</div>
+                <div style={{ height: 4, borderRadius: 2, background: "rgba(255,255,255,.06)", marginTop: 8, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${levelProgress * 100}%`, background: t1, borderRadius: 2, transition: "width .3s" }} />
+                </div>
+                <div style={{ fontSize: 10, color: t3, marginTop: 4 }}>{Math.round(levelProgress * 100)}% to Lv{level + 1}</div>
+              </div>
+            </div>
+
+            {/* Today's Workout Card */}
+            {program && (
+              <div onClick={() => { setPage("training"); setStep(2); setActiveDay(rotationIndex % program.length); }} style={{ background: sf, border: `1px solid ${bd}`, borderRadius: 16, padding: 20, marginBottom: 12, cursor: "pointer", transition: "all .2s" }} onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,.2)"; e.currentTarget.style.transform = "translateY(-2px)"; }} onMouseLeave={e => { e.currentTarget.style.borderColor = bd; e.currentTarget.style.transform = "none"; }}>
+                <div style={{ fontSize: 10, fontWeight: 600, color: t3, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 8 }}>Today's Workout</div>
+                <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{program[rotationIndex % program.length]?.name}</div>
+                <div style={{ fontSize: 12, color: t2, marginBottom: 12 }}>{program[rotationIndex % program.length]?.exercises?.map(e => e.name.split("(")[0].trim()).join(" · ")}</div>
+                <div style={{ background: t1, color: "#000", borderRadius: 10, padding: "10px 0", textAlign: "center", fontSize: 14, fontWeight: 600, fontFamily: "inherit" }}>Start Workout →</div>
+              </div>
+            )}
+
+            {!program && (
+              <div onClick={() => { setPage("training"); setStep(0); }} style={{ background: sf, border: `1px solid ${bd}`, borderRadius: 16, padding: 24, cursor: "pointer", textAlign: "center" }}>
+                <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>Set up your program</div>
+                <div style={{ background: t1, color: "#000", borderRadius: 10, padding: "10px 24px", display: "inline-block", fontSize: 14, fontWeight: 600 }}>Get Started →</div>
+              </div>
+            )}
+
+            {/* Macro Progress (if nutrition setup) */}
+            {nutrition && (
+              <div style={{ background: sf, border: `1px solid ${bd}`, borderRadius: 14, padding: 16, marginBottom: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <span style={{ fontSize: 12, fontWeight: 600 }}>Today's Macros</span>
+                  <span style={{ fontSize: 11, color: t3, fontFamily: "'JetBrains Mono'" }}>{totals.cals} / {nutrition.cals} cal</span>
+                </div>
+                <div style={{ height: 8, borderRadius: 4, background: "rgba(255,255,255,.04)", overflow: "hidden", marginBottom: 6 }}>
+                  <div style={{ height: "100%", width: `${Math.min((totals.cals / nutrition.cals) * 100, 100)}%`, background: t1, borderRadius: 4, transition: "width .3s" }} />
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: t3 }}>
+                  <span>{totals.protein}/{nutrition.protein}g P</span>
+                  <span>{totals.carbs}/{nutrition.carbs}g C</span>
+                  <span>{totals.fat}/{nutrition.fat}g F</span>
+                </div>
+                {foodLog.length === 0 && <div style={{ textAlign: "center", marginTop: 10 }}><button onClick={() => setPage("nutrition")} style={{ background: sf2, border: `1px solid ${bd}`, borderRadius: 8, padding: "6px 16px", fontSize: 11, color: t2, cursor: "pointer", fontFamily: "inherit" }}>Log Food →</button></div>}
+              </div>
+            )}
+
+            {/* Daily Tip */}
+            <div style={{ background: sf, border: `1px solid ${bd}`, borderRadius: 14, padding: 16, marginBottom: 12 }}>
+              <div style={{ fontSize: 10, fontWeight: 600, color: t3, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 6 }}>💡 Daily Tip</div>
+              <p style={{ fontSize: 13, color: t2, lineHeight: 1.5 }}>{DAILY_TIPS[dailyTipIdx % DAILY_TIPS.length]}</p>
+            </div>
+
+            {/* PR Board Preview */}
+            {Object.keys(prs).length > 0 && (
+              <div style={{ background: sf, border: `1px solid ${bd}`, borderRadius: 14, padding: 16 }}>
+                <div style={{ fontSize: 10, fontWeight: 600, color: t3, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>🏆 Personal Records</div>
+                {Object.entries(prs).slice(0, 5).map(([name, weight]) => (
+                  <div key={name} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,.03)", fontSize: 12 }}>
+                    <span style={{ color: t2 }}>{name.split("(")[0].trim()}</span>
+                    <span style={{ fontFamily: "'JetBrains Mono'", fontWeight: 700 }}>{weight} lbs</span>
+                  </div>
+                ))}
+                {Object.keys(prs).length > 5 && <div style={{ fontSize: 10, color: t3, textAlign: "center", marginTop: 6 }}>+{Object.keys(prs).length - 5} more</div>}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ═══ TRAINING — Equipment ═══ */}
         {page === "training" && step === 0 && (
@@ -994,7 +1295,7 @@ export default function App() {
                   <div key={i} style={{ padding: "14px 0", borderBottom: `1px solid rgba(255,255,255,.05)`, opacity: done ? 0.3 : 1, transition: "opacity .2s" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                       {/* Check */}
-                      <div onClick={() => togChk(i)} style={{ width: 22, height: 22, borderRadius: "50%", border: `1.5px solid ${done ? t1 : "rgba(255,255,255,.15)"}`, background: done ? t1 : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 10, color: "#000", flexShrink: 0, transition: "all .2s" }}>{done && "✓"}</div>
+                      <div onClick={() => togChkHooked(i)} style={{ width: 22, height: 22, borderRadius: "50%", border: `1.5px solid ${done ? t1 : "rgba(255,255,255,.15)"}`, background: done ? t1 : "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 10, color: "#000", flexShrink: 0, transition: "all .2s" }}>{done && "✓"}</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                           <span style={{ fontSize: 14, fontWeight: 500, textDecoration: done ? "line-through" : "none" }}>{ex.name}</span>
@@ -1051,10 +1352,10 @@ export default function App() {
                               {detail[si]?.reps}r{detail[si]?.rir && <span style={{ color: t1 }}> @{detail[si].rir}</span>}{detail[si]?.pct === "-10%" && <span style={{ color: t3 }}> -10%</span>}
                             </span>
                             <div style={{ position: "relative" }}>
-                              <input className="ip" style={{ width: 80, padding: "6px 10px", fontSize: 12, fontFamily: "'JetBrains Mono'", borderRadius: 8, borderColor: isOverride ? "rgba(255,255,255,.25)" : undefined }} placeholder={predicted ? `${predicted}` : "lbs"} value={current} onChange={(e) => logW(i, si, e.target.value)} />
+                              <input className="ip" style={{ width: 80, padding: "6px 10px", fontSize: 12, fontFamily: "'JetBrains Mono'", borderRadius: 8, borderColor: isOverride ? "rgba(255,255,255,.25)" : undefined }} placeholder={predicted ? `${predicted}` : "lbs"} value={current} onChange={(e) => logWHooked(i, si, e.target.value)} />
                             </div>
                             {predicted && !current && (
-                              <button onClick={() => logW(i, si, String(predicted))} style={{ background: sf2, border: `1px solid ${bd}`, borderRadius: 6, padding: "4px 8px", fontSize: 9, fontWeight: 600, color: t2, cursor: "pointer", fontFamily: "'JetBrains Mono'", whiteSpace: "nowrap" }}>Use {predicted}</button>
+                              <button onClick={() => logWHooked(i, si, String(predicted))} style={{ background: sf2, border: `1px solid ${bd}`, borderRadius: 6, padding: "4px 8px", fontSize: 9, fontWeight: 600, color: t2, cursor: "pointer", fontFamily: "'JetBrains Mono'", whiteSpace: "nowrap" }}>Use {predicted}</button>
                             )}
                             {isOverride && (
                               <span style={{ fontSize: 9, color: t3, fontStyle: "italic" }}>({predicted} suggested)</span>
@@ -1141,7 +1442,7 @@ export default function App() {
                   {foodResults.length > 0 && (
                     <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 20, background: "#111", border: `1px solid ${bd}`, borderRadius: 12, maxHeight: 240, overflowY: "auto", marginTop: 4, boxShadow: "0 12px 40px rgba(0,0,0,.6)" }}>
                       {foodResults.map((f, i) => (
-                        <div key={i} onClick={() => { addFood({ ...f, source: "search" }); setFoodSearch(""); setFoodResults([]); }} style={{ padding: "10px 14px", cursor: "pointer", borderBottom: `1px solid rgba(255,255,255,.04)`, transition: "background .1s" }} onMouseEnter={e => e.currentTarget.style.background = sf2} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                        <div key={i} onClick={() => { addFoodHooked({ ...f, source: "search" }); setFoodSearch(""); setFoodResults([]); }} style={{ padding: "10px 14px", cursor: "pointer", borderBottom: `1px solid rgba(255,255,255,.04)`, transition: "background .1s" }} onMouseEnter={e => e.currentTarget.style.background = sf2} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                           <div style={{ fontSize: 13, fontWeight: 500 }}>{f.name}</div>
                           <div style={{ fontSize: 11, color: t3, marginTop: 2 }}>{f.cals} cal · {f.protein}P · {f.carbs}C · {f.fat}F <span style={{ opacity: 0.4 }}>per {f.serving}</span></div>
                         </div>
@@ -1179,7 +1480,7 @@ export default function App() {
                         <div style={{ fontSize: 14, fontWeight: 600 }}>{photoResult.name}</div>
                         <div style={{ fontSize: 12, color: t2, margin: "4px 0 8px" }}>{photoResult.cals} cal · {photoResult.protein}P · {photoResult.carbs}C · {photoResult.fat}F</div>
                         <div style={{ display: "flex", gap: 6 }}>
-                          <button onClick={() => { addFood({ ...photoResult, source: "photo" }); setPhotoPreview(null); setPhotoResult(null); }} style={{ background: t1, color: "#000", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Add</button>
+                          <button onClick={() => { addFoodHooked({ ...photoResult, source: "photo" }); setPhotoPreview(null); setPhotoResult(null); }} style={{ background: t1, color: "#000", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Add</button>
                           <button onClick={() => { setPhotoPreview(null); setPhotoResult(null); }} style={{ background: sf, color: t2, border: `1px solid ${bd}`, borderRadius: 8, padding: "6px 14px", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>Discard</button>
                         </div>
                       </div>
@@ -1296,7 +1597,7 @@ export default function App() {
                                   </div>
                                   <p style={{ fontSize: 12, color: t3, marginTop: 6, lineHeight: 1.4 }}>{pick.why}</p>
                                 </div>
-                                <button onClick={() => { addFood({ name: `${restSearch}: ${pick.name}`, cals: pick.cals, protein: pick.protein, carbs: pick.carbs, fat: pick.fat, source: "search" }); }} style={{ background: sf2, border: `1px solid ${bd}`, borderRadius: 8, padding: "6px 12px", fontSize: 10, fontWeight: 600, color: t2, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", flexShrink: 0 }}>+ Log</button>
+                                <button onClick={() => { addFoodHooked({ name: `${restSearch}: ${pick.name}`, cals: pick.cals, protein: pick.protein, carbs: pick.carbs, fat: pick.fat, source: "search" }); }} style={{ background: sf2, border: `1px solid ${bd}`, borderRadius: 8, padding: "6px 12px", fontSize: 10, fontWeight: 600, color: t2, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", flexShrink: 0 }}>+ Log</button>
                               </div>
                               <div style={{ display: "flex", gap: 16, marginTop: 10, paddingTop: 10, borderTop: `1px solid rgba(255,255,255,.05)` }}>
                                 {[{ l: "Cal", v: pick.cals }, { l: "Protein", v: `${pick.protein}g` }, { l: "Carbs", v: `${pick.carbs}g` }, { l: "Fat", v: `${pick.fat}g` }].map(m => (
