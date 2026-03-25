@@ -263,6 +263,52 @@ const PROTOCOL_DETAIL = [
 ];
 
 /* ═══════════════════════════════════════════════════════════════
+   LOAD PREDICTION ENGINE
+
+   Uses Epley formula (1RM = w × (1 + r/30)) to convert the
+   user's Week 1 10RM into predicted loads for every subsequent
+   week. "UP" weeks get a ~5% bump (typical progressive overload
+   for intermediates). Adjustments:
+     +5% "feeling great" / -5% "rough day"
+   The prediction is a SUGGESTION — users type over it to override.
+   ═══════════════════════════════════════════════════════════════ */
+function predictLoad(tenRM, weekIdx, setIdx, feeling) {
+  if (!tenRM || tenRM <= 0) return null;
+  const w = Number(tenRM);
+  // Estimated 1RM from 10RM using Epley
+  const oneRM = w * (1 + 10 / 30); // ≈ 1.333 × 10RM
+
+  // Week-by-week primary set load as % of 1RM
+  // Based on rep ranges: 10r≈75%, 8r≈78%, 6r≈83%, 7r≈80%, 5r≈87%, 4r≈90%
+  // Progressive overload adds ~2-3% per "UP" phase
+  const weekPct = [
+    [0.75],                   // Wk1: 10RM (75% 1RM) × 1 set
+    [0.75, 0.75],             // Wk2: same 10RM load for 8 reps (submaximal)
+    [0.83, 0.83],             // Wk3: UP to ~6RM territory
+    [0.83, 0.747],            // Wk4: same load for 7 reps, S2 -10%
+    [0.87, 0.783],            // Wk5: UP to ~5RM territory
+    [0.87, 0.783],            // Wk6: SAME (hold)
+    [0.89, 0.801],            // Wk7: UP again (adaptation kicking in)
+    [0.91, 0.819],            // Wk8: UP (peak approach)
+    [0.91, 0.819],            // Wk9: SAME (hold)
+    [0.93, 0.837],            // Wk10: UP to ~4RM (near peak)
+    [0.93, 0.837],            // Wk11: SAME (hold)
+    [0.93, 0.837],            // Wk12: PR attempt — 5 reps at Wk11 4-rep load
+  ];
+
+  const pcts = weekPct[weekIdx];
+  if (!pcts || setIdx >= pcts.length) return null;
+
+  let load = Math.round(oneRM * pcts[setIdx] / 5) * 5; // round to nearest 5 lbs
+
+  // Feeling adjustment
+  if (feeling === "great") load = Math.round((load * 1.05) / 5) * 5;
+  if (feeling === "rough") load = Math.round((load * 0.95) / 5) * 5;
+
+  return load;
+}
+
+/* ═══════════════════════════════════════════════════════════════
    NUTRITION
    ═══════════════════════════════════════════════════════════════ */
 function calcNutrition(weight, height, goal, weekData) {
@@ -350,6 +396,7 @@ export default function App() {
   const [logs, setLogs] = useState({});
   const [swapIdx, setSwapIdx] = useState(null);
   const [vidIdx, setVidIdx] = useState(null);
+  const [feeling, setFeeling] = useState(null); // null | "great" | "rough"
 
   // Nutrition
   const [nGoal, setNGoal] = useState(null);
@@ -401,6 +448,7 @@ export default function App() {
       if (d.nSetup) setNSetup(d.nSetup);
       if (d.weekCheckins) setWeekCheckins(d.weekCheckins);
       if (d.foodLog) setFoodLog(d.foodLog);
+      if (d.feeling) setFeeling(d.feeling);
     }
   }, [profileId]);
 
@@ -410,7 +458,7 @@ export default function App() {
     if (!profileId) return;
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      saveProfileData(profileId, { equip: [...equip], splitId, program, step, logs, checked: [...checked], nGoal, nWeight, nHeight, nSetup, weekCheckins, foodLog });
+      saveProfileData(profileId, { equip: [...equip], splitId, program, step, logs, checked: [...checked], nGoal, nWeight, nHeight, nSetup, weekCheckins, foodLog, feeling });
     }, 500);
   }, [profileId, equip, splitId, program, step, logs, checked, nGoal, nWeight, nHeight, nSetup, weekCheckins, foodLog]);
 
@@ -609,8 +657,31 @@ export default function App() {
 
             {/* Protocol */}
             <div style={{ background: sf, border: `1px solid ${bd}`, borderRadius: 14, padding: 16, marginBottom: 12 }}>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>{proto.label}</div>
-              <p style={{ fontSize: 12, color: t2, marginTop: 4 }}>{proto.note}</p>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>{proto.label}</div>
+                  <p style={{ fontSize: 12, color: t2, marginTop: 4 }}>{proto.note}</p>
+                </div>
+              </div>
+              {/* Feeling adjuster */}
+              {activeWeek > 0 && (
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid rgba(255,255,255,.05)` }}>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: t3, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>How are you feeling today?</div>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {[
+                      { id: null, label: "Normal", emoji: "😐" },
+                      { id: "great", label: "+5% Load", emoji: "🔥" },
+                      { id: "rough", label: "−5% Load", emoji: "😮‍💨" },
+                    ].map((f) => (
+                      <button key={f.label} onClick={() => setFeeling(f.id)} style={{ flex: 1, padding: "10px 8px", borderRadius: 10, border: `1px solid ${feeling === f.id ? "rgba(255,255,255,.3)" : bd}`, background: feeling === f.id ? sf2 : sf, color: feeling === f.id ? t1 : t3, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", transition: "all .15s" }}>
+                        <div style={{ fontSize: 16, marginBottom: 2 }}>{f.emoji}</div>
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p style={{ fontSize: 10, color: t3, marginTop: 6 }}>Predicted loads adjust based on your Week 1 entries. Override any weight by typing over it.</p>
+                </div>
+              )}
             </div>
 
             {/* Day tabs */}
@@ -668,17 +739,31 @@ export default function App() {
                       </div>
                     )}
 
-                    {/* Weight logging */}
+                    {/* Weight logging with predicted loads */}
                     <div style={{ marginTop: 8, paddingLeft: 32 }}>
-                      {Array.from({ length: proto.sets }).map((_, si) => (
-                        <div key={si} style={{ display: "flex", gap: 8, alignItems: "center", marginTop: si > 0 ? 4 : 0 }}>
-                          <span style={{ fontSize: 10, fontWeight: 600, color: t3, width: 24, fontFamily: "'JetBrains Mono'" }}>S{si + 1}</span>
-                          <span style={{ fontSize: 11, color: t2, fontFamily: "'JetBrains Mono'", minWidth: 80 }}>
-                            {detail[si]?.reps}r{detail[si]?.rir && <span style={{ color: t1 }}> @{detail[si].rir}</span>}{detail[si]?.pct === "-10%" && <span style={{ color: t3 }}> -10%</span>}
-                          </span>
-                          <input className="ip" style={{ width: 80, padding: "6px 10px", fontSize: 12, fontFamily: "'JetBrains Mono'", borderRadius: 8 }} placeholder="lbs" value={getW(i, si)} onChange={(e) => logW(i, si, e.target.value)} />
-                        </div>
-                      ))}
+                      {Array.from({ length: proto.sets }).map((_, si) => {
+                        const tenRM = logs[`0-${activeDay}-${i}-0`]; // Week 1 set 1 = their 10RM
+                        const predicted = activeWeek > 0 ? predictLoad(tenRM, activeWeek, si, feeling) : null;
+                        const current = getW(i, si);
+                        const isOverride = current && predicted && Number(current) !== predicted;
+                        return (
+                          <div key={si} style={{ display: "flex", gap: 8, alignItems: "center", marginTop: si > 0 ? 4 : 0 }}>
+                            <span style={{ fontSize: 10, fontWeight: 600, color: t3, width: 24, fontFamily: "'JetBrains Mono'" }}>S{si + 1}</span>
+                            <span style={{ fontSize: 11, color: t2, fontFamily: "'JetBrains Mono'", minWidth: 80 }}>
+                              {detail[si]?.reps}r{detail[si]?.rir && <span style={{ color: t1 }}> @{detail[si].rir}</span>}{detail[si]?.pct === "-10%" && <span style={{ color: t3 }}> -10%</span>}
+                            </span>
+                            <div style={{ position: "relative" }}>
+                              <input className="ip" style={{ width: 80, padding: "6px 10px", fontSize: 12, fontFamily: "'JetBrains Mono'", borderRadius: 8, borderColor: isOverride ? "rgba(255,255,255,.25)" : undefined }} placeholder={predicted ? `${predicted}` : "lbs"} value={current} onChange={(e) => logW(i, si, e.target.value)} />
+                            </div>
+                            {predicted && !current && (
+                              <button onClick={() => logW(i, si, String(predicted))} style={{ background: sf2, border: `1px solid ${bd}`, borderRadius: 6, padding: "4px 8px", fontSize: 9, fontWeight: 600, color: t2, cursor: "pointer", fontFamily: "'JetBrains Mono'", whiteSpace: "nowrap" }}>Use {predicted}</button>
+                            )}
+                            {isOverride && (
+                              <span style={{ fontSize: 9, color: t3, fontStyle: "italic" }}>({predicted} suggested)</span>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );
