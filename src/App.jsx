@@ -483,6 +483,195 @@ function calcStoreTotal(baseList, multiplier) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   RESTAURANT NUTRITION DATABASE — best macro-friendly picks per chain
+   Curated: high protein, reasonable calories for each goal.
+   ═══════════════════════════════════════════════════════════════ */
+const RESTAURANT_DB = {
+  "McDonald's": {
+    bulk: [
+      { name: "2× Egg McMuffins", cals: 600, protein: 34, carbs: 60, fat: 24, why: "High protein breakfast, easy double-up" },
+      { name: "2× McDoubles (no bun on one)", cals: 680, protein: 44, carbs: 33, fat: 40, why: "Cheap protein stack — 44g for under $5" },
+      { name: "Quarter Pounder + Medium Fries", cals: 840, protein: 35, carbs: 85, fat: 41, why: "Solid calorie load with balanced macros" },
+    ],
+    cut: [
+      { name: "Egg McMuffin", cals: 300, protein: 17, carbs: 30, fat: 12, why: "Best cal-to-protein ratio on the menu" },
+      { name: "McChicken (no mayo)", cals: 300, protein: 14, carbs: 40, fat: 10, why: "Drop the mayo and save 100 cals" },
+      { name: "6pc McNuggets + Side Salad", cals: 300, protein: 18, carbs: 20, fat: 17, why: "Skip the fries, keep the protein" },
+    ],
+  },
+  "Chick-fil-A": {
+    bulk: [
+      { name: "Grilled Sandwich + Large Fries", cals: 860, protein: 37, carbs: 104, fat: 28, why: "Cleanest fast food protein + high carb energy" },
+      { name: "12pc Nuggets + Mac & Cheese", cals: 830, protein: 59, carbs: 49, fat: 45, why: "59g protein — hard to beat that" },
+      { name: "Spicy Sandwich + 8pc Nuggets", cals: 700, protein: 55, carbs: 53, fat: 30, why: "Protein bomb with two entrees" },
+    ],
+    cut: [
+      { name: "Grilled Nuggets (12pc)", cals: 200, protein: 38, carbs: 2, fat: 4, why: "38g protein for only 200 cals — best in fast food" },
+      { name: "Grilled Chicken Sandwich", cals: 320, protein: 30, carbs: 36, fat: 6, why: "A real chicken breast on a bun" },
+      { name: "Grilled Nuggets (8pc) + Side Salad", cals: 210, protein: 28, carbs: 8, fat: 5, why: "Filling and under 250 cals" },
+    ],
+  },
+  "Chipotle": {
+    bulk: [
+      { name: "Chicken Bowl (white rice, black beans, cheese, sour cream)", cals: 920, protein: 58, carbs: 90, fat: 32, why: "Perfect muscle-building bowl — stack it up" },
+      { name: "Steak Burrito (everything)", cals: 1100, protein: 55, carbs: 116, fat: 42, why: "Mass gainer in burrito form" },
+      { name: "Double Chicken Bowl + Guac", cals: 1040, protein: 80, carbs: 68, fat: 40, why: "80g protein in one bowl — ask for double" },
+    ],
+    cut: [
+      { name: "Chicken Bowl (no rice, extra fajitas, salsa)", cals: 400, protein: 46, carbs: 20, fat: 14, why: "Skip rice, load veggies — still filling" },
+      { name: "Chicken Salad (romaine, salsa, fajitas)", cals: 340, protein: 42, carbs: 14, fat: 10, why: "Lowest cal option that's actually good" },
+      { name: "Sofritas Bowl (brown rice, beans, no cheese)", cals: 520, protein: 22, carbs: 72, fat: 16, why: "Plant-based cut option, high fiber" },
+    ],
+  },
+  "Subway": {
+    bulk: [
+      { name: "Footlong Turkey + Footlong Chicken Teriyaki", cals: 870, protein: 58, carbs: 139, fat: 10, why: "Two footlongs — ultra high protein, low fat" },
+      { name: "Footlong Steak & Cheese (all veggies)", cals: 720, protein: 48, carbs: 92, fat: 18, why: "Loaded sub with good macros" },
+      { name: "Footlong Chicken Teriyaki + Cookie", cals: 820, protein: 44, carbs: 141, fat: 14, why: "High carb energy day with dessert" },
+    ],
+    cut: [
+      { name: "6\" Turkey Sub (no cheese, no mayo)", cals: 230, protein: 18, carbs: 40, fat: 2, why: "One of the leanest fast food meals possible" },
+      { name: "6\" Chicken Teriyaki (no cheese)", cals: 270, protein: 22, carbs: 42, fat: 3, why: "Sweet flavor, great macros" },
+      { name: "Chopped Salad (chicken, no dressing)", cals: 200, protein: 24, carbs: 10, fat: 6, why: "Skip the bread entirely" },
+    ],
+  },
+  "Taco Bell": {
+    bulk: [
+      { name: "2× Crunchwrap Supreme + Baja Blast", cals: 1200, protein: 32, carbs: 178, fat: 42, why: "Calorie dense — good for hard gainers" },
+      { name: "3× Chicken Soft Tacos + Beans", cals: 720, protein: 36, carbs: 81, fat: 24, why: "Volume meal with decent protein" },
+      { name: "Quesadilla + Burrito Supreme", cals: 890, protein: 43, carbs: 88, fat: 41, why: "Two heavy hitters stacked" },
+    ],
+    cut: [
+      { name: "2× Chicken Soft Tacos", cals: 340, protein: 20, carbs: 34, fat: 14, why: "Simple, portioned, and satisfying" },
+      { name: "Power Bowl (chicken)", cals: 460, protein: 26, carbs: 50, fat: 18, why: "Their healthiest option by far" },
+      { name: "Crunchy Taco + Side of Black Beans", cals: 290, protein: 14, carbs: 33, fat: 12, why: "Light but filling with fiber" },
+    ],
+  },
+  "Wendy's": {
+    bulk: [
+      { name: "Dave's Double + Medium Fries", cals: 1210, protein: 52, carbs: 88, fat: 70, why: "Big calorie hit with solid protein" },
+      { name: "Baconator + Jr Cheeseburger", cals: 1240, protein: 72, carbs: 68, fat: 76, why: "72g protein — aggressive bulk meal" },
+      { name: "Spicy Chicken + 10pc Nuggets", cals: 940, protein: 50, carbs: 77, fat: 47, why: "Two protein sources stacked" },
+    ],
+    cut: [
+      { name: "Jr Cheeseburger (no mayo)", cals: 240, protein: 15, carbs: 26, fat: 10, why: "Smallest burger, still satisfying" },
+      { name: "Grilled Chicken Wrap", cals: 270, protein: 20, carbs: 24, fat: 10, why: "Wrap keeps portions in check" },
+      { name: "Parmesan Caesar Salad (half size)", cals: 250, protein: 18, carbs: 10, fat: 16, why: "Low carb option that tastes good" },
+    ],
+  },
+  "Five Guys": {
+    bulk: [
+      { name: "Cheeseburger + Regular Fries", cals: 1370, protein: 55, carbs: 103, fat: 78, why: "Calorie bomb — perfect for hard gainers" },
+      { name: "Bacon Cheeseburger + Cajun Fries", cals: 1540, protein: 62, carbs: 103, fat: 92, why: "Maximum calories in one sitting" },
+      { name: "Little Cheeseburger + Regular Fries", cals: 1080, protein: 35, carbs: 103, fat: 55, why: "Slightly smaller but still massive" },
+    ],
+    cut: [
+      { name: "Little Hamburger (lettuce wrap)", cals: 340, protein: 20, carbs: 2, fat: 26, why: "Bun-free — cuts carbs dramatically" },
+      { name: "Veggie Sandwich (all toppings)", cals: 280, protein: 12, carbs: 40, fat: 10, why: "Loaded veggies on a bun" },
+      { name: "Little Cheeseburger (no fries)", cals: 550, protein: 27, carbs: 40, fat: 32, why: "The fries are the real calorie trap" },
+    ],
+  },
+  "Panda Express": {
+    bulk: [
+      { name: "Plate: Fried Rice + Orange Chicken + Beijing Beef", cals: 1480, protein: 52, carbs: 190, fat: 55, why: "High carb, high calorie — classic bulk plate" },
+      { name: "Bigger Plate: Fried Rice + Orange Chicken + Kung Pao + Teriyaki", cals: 1600, protein: 68, carbs: 200, fat: 52, why: "Three entrees — maximum volume" },
+      { name: "Bowl: Fried Rice + Teriyaki Chicken", cals: 660, protein: 34, carbs: 100, fat: 14, why: "Cleanest Panda option with good carbs" },
+    ],
+    cut: [
+      { name: "Bowl: Steamed Rice + Broccoli Beef", cals: 530, protein: 17, carbs: 99, fat: 7, why: "Lowest fat entrée they offer" },
+      { name: "Bowl: Super Greens + Grilled Teriyaki Chicken", cals: 380, protein: 38, carbs: 20, fat: 14, why: "Swap rice for veggies — big calorie savings" },
+      { name: "Plate: Super Greens + Mushroom Chicken + String Bean Chicken", cals: 480, protein: 40, carbs: 28, fat: 22, why: "Two light entrees, no rice" },
+    ],
+  },
+  "In-N-Out": {
+    bulk: [
+      { name: "Double-Double + Fries + Shake", cals: 1330, protein: 50, carbs: 116, fat: 70, why: "The full In-N-Out experience" },
+      { name: "Double-Double Animal Style + Fries", cals: 1080, protein: 40, carbs: 78, fat: 66, why: "Animal style adds ~100 cals" },
+      { name: "2× Cheeseburgers", cals: 960, protein: 44, carbs: 78, fat: 54, why: "Double up for easy protein" },
+    ],
+    cut: [
+      { name: "Protein Style Cheeseburger", cals: 330, protein: 18, carbs: 11, fat: 25, why: "Lettuce wrap — cuts 150+ cals from the bun" },
+      { name: "Hamburger (no spread)", cals: 310, protein: 16, carbs: 39, fat: 10, why: "Skip the spread — huge fat savings" },
+      { name: "Protein Style Double-Double (no spread)", cals: 420, protein: 33, carbs: 11, fat: 27, why: "More protein, still low carb" },
+    ],
+  },
+  "Popeyes": {
+    bulk: [
+      { name: "Chicken Sandwich + 3pc Tenders + Biscuit", cals: 1290, protein: 62, carbs: 82, fat: 72, why: "Protein-packed combo with that Popeyes flavor" },
+      { name: "5pc Tenders + Fries + Biscuit", cals: 1100, protein: 48, carbs: 90, fat: 56, why: "Tenders are better macros than bone-in" },
+      { name: "Chicken Sandwich + Red Beans & Rice", cals: 930, protein: 38, carbs: 80, fat: 48, why: "Beans add fiber and extra protein" },
+    ],
+    cut: [
+      { name: "3pc Blackened Tenders", cals: 170, protein: 26, carbs: 2, fat: 5, why: "Blackened not fried — massive calorie difference" },
+      { name: "3pc Blackened Tenders + Green Beans", cals: 240, protein: 28, carbs: 14, fat: 8, why: "Full meal under 250 cals" },
+      { name: "Chicken Sandwich (no mayo)", cals: 560, protein: 28, carbs: 50, fat: 28, why: "Dropping mayo saves 100+ cals" },
+    ],
+  },
+  "KFC": {
+    bulk: [
+      { name: "3pc Original Recipe (breast, thigh, drum) + Mashed Potatoes", cals: 1020, protein: 65, carbs: 40, fat: 58, why: "65g protein from real chicken pieces" },
+      { name: "Famous Bowl + Extra Crispy Breast", cals: 1100, protein: 52, carbs: 72, fat: 62, why: "Bowl is a calorie-dense base" },
+      { name: "Chicken Pot Pie + Biscuit", cals: 950, protein: 28, carbs: 82, fat: 54, why: "Comfort food bulk meal" },
+    ],
+    cut: [
+      { name: "Grilled Chicken Breast + Corn", cals: 280, protein: 38, carbs: 18, fat: 6, why: "Grilled breast is their hidden gem" },
+      { name: "Grilled Chicken Breast + Green Beans", cals: 240, protein: 38, carbs: 8, fat: 5, why: "Ultra lean — 38g protein under 250 cals" },
+      { name: "Grilled Drumstick (2) + Coleslaw", cals: 300, protein: 22, carbs: 14, fat: 16, why: "Dark meat has more flavor, still lean when grilled" },
+    ],
+  },
+  "Starbucks": {
+    bulk: [
+      { name: "Impossible Breakfast Sandwich + Banana + Grande Latte", cals: 640, protein: 28, carbs: 80, fat: 22, why: "Balanced high-cal breakfast" },
+      { name: "Turkey Bacon Egg White Sandwich + Vanilla Latte", cals: 530, protein: 28, carbs: 62, fat: 16, why: "Solid protein with coffee fuel" },
+      { name: "Protein Box (Eggs & Cheese) + Caramel Frappuccino", cals: 680, protein: 20, carbs: 84, fat: 28, why: "Treat yourself and still hit macros" },
+    ],
+    cut: [
+      { name: "Egg White & Roasted Red Pepper Sous Vide Bites (2)", cals: 170, protein: 13, carbs: 11, fat: 8, why: "High protein snack, not a full meal" },
+      { name: "Turkey Bacon Egg White Sandwich", cals: 230, protein: 17, carbs: 28, fat: 5, why: "Best macro breakfast they have" },
+      { name: "Iced Coffee (unsweetened) + Protein Box", cals: 245, protein: 14, carbs: 22, fat: 11, why: "Zero cal coffee + portioned food" },
+    ],
+  },
+  "Raising Cane's": {
+    bulk: [
+      { name: "The Box Combo (4 fingers + fries + toast + coleslaw)", cals: 1250, protein: 48, carbs: 100, fat: 66, why: "Their signature combo — go all in" },
+      { name: "The Caniac Combo (6 fingers + fries + toast + 2 sauces)", cals: 1790, protein: 68, carbs: 142, fat: 96, why: "The biggest combo — serious calories" },
+      { name: "3 Finger Combo + Extra Bread", cals: 980, protein: 42, carbs: 90, fat: 48, why: "More manageable bulk option" },
+    ],
+    cut: [
+      { name: "3 Fingers Only (no fries, no toast)", cals: 360, protein: 34, carbs: 10, fat: 20, why: "Just the chicken — skip the sides" },
+      { name: "3 Finger Combo (swap fries for coleslaw)", cals: 620, protein: 36, carbs: 34, fat: 36, why: "Coleslaw is 150 cal less than fries" },
+      { name: "Kid's Combo (2 fingers + 1 side)", cals: 530, protein: 24, carbs: 52, fat: 26, why: "Portion control with the kids menu" },
+    ],
+  },
+  "Wingstop": {
+    bulk: [
+      { name: "10pc Classic Wings (Lemon Pepper) + Fries", cals: 1180, protein: 72, carbs: 58, fat: 72, why: "72g protein — wings are pure chicken" },
+      { name: "10pc Boneless Wings (any flavor) + Ranch + Fries", cals: 1350, protein: 56, carbs: 110, fat: 70, why: "Boneless are breaded = more carbs for bulking" },
+      { name: "8pc Classic Wings + Cajun Fried Corn", cals: 960, protein: 58, carbs: 40, fat: 60, why: "High protein, fun sides" },
+    ],
+    cut: [
+      { name: "8pc Classic Wings (plain or lemon pepper)", cals: 640, protein: 48, carbs: 0, fat: 48, why: "Zero carb — pure protein and fat" },
+      { name: "6pc Classic Wings (plain) + Celery", cals: 480, protein: 36, carbs: 4, fat: 36, why: "Lowest cal combo with veggies" },
+      { name: "8pc Boneless Wings (atomic) no sides", cals: 560, protein: 32, carbs: 48, fat: 24, why: "Spicy keeps portions small naturally" },
+    ],
+  },
+};
+
+const RESTAURANT_NAMES = Object.keys(RESTAURANT_DB);
+
+function searchRestaurants(query) {
+  if (!query || query.length < 2) return [];
+  const q = query.toLowerCase();
+  return RESTAURANT_NAMES.filter(r => r.toLowerCase().includes(q)).slice(0, 6);
+}
+
+function getRestaurantPicks(name, goal) {
+  const data = RESTAURANT_DB[name];
+  if (!data) return null;
+  return data[goal] || data.bulk;
+}
+
+/* ═══════════════════════════════════════════════════════════════
    BARBELL SVG LOGO
    ═══════════════════════════════════════════════════════════════ */
 const BarbellLogo = () => (
@@ -545,6 +734,13 @@ export default function App() {
   const [storeLoading, setStoreLoading] = useState(false);
   const [storeError, setStoreError] = useState("");
   const [geoDisplay, setGeoDisplay] = useState("");
+
+  // Restaurant finder
+  const [restSearch, setRestSearch] = useState("");
+  const [restResults, setRestResults] = useState([]);
+  const [restPicks, setRestPicks] = useState(null);
+  const [restLoading, setRestLoading] = useState(false);
+  const [groTab, setGroTab] = useState("grocery"); // "grocery" | "restaurant"
 
   // ─── Load profile on mount ───
   useEffect(() => {
@@ -706,7 +902,7 @@ export default function App() {
 
         {/* ═══ NAV ═══ */}
         <div style={{ display: "flex", gap: 4, padding: "12px 0 28px" }}>
-          {["training", "nutrition", "grocery"].map((n) => (
+          {["training", "nutrition", "food"].map((n) => (
             <button key={n} onClick={() => setPage(n)} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: "none", fontSize: 12, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase", cursor: "pointer", fontFamily: "inherit", transition: "all .2s", background: page === n ? t1 : sf, color: page === n ? "#000" : t3 }}>{n}</button>
           ))}
         </div>
@@ -1048,17 +1244,97 @@ export default function App() {
           </div>
         )}
 
-        {/* ═══ GROCERY ═══ */}
-        {page === "grocery" && (
+        {/* ═══ FOOD — Grocery + Restaurant ═══ */}
+        {page === "food" && (
           <div className="ani">
-            <h2 style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-.02em", marginBottom: 6 }}>Grocery</h2>
-            <p style={{ fontSize: 13, color: t2, marginBottom: 20 }}>{nGoal ? `${nGoal === "bulk" ? "Bulk" : "Cut"} list with real stores near you.` : "Set up nutrition first."}</p>
+            <h2 style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-.02em", marginBottom: 6 }}>Restaurant & Grocery</h2>
+            <p style={{ fontSize: 13, color: t2, marginBottom: 16 }}>{nGoal ? `${nGoal === "bulk" ? "Bulk" : "Cut"}-optimized picks and grocery lists.` : "Set up nutrition first."}</p>
             {!nGoal ? (
               <div style={{ background: sf, border: `1px solid ${bd}`, borderRadius: 14, padding: 24, textAlign: "center" }}>
                 <button onClick={() => setPage("nutrition")} style={{ background: t1, color: "#000", border: "none", borderRadius: 12, padding: "12px 28px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>Go to Nutrition →</button>
               </div>
             ) : (
               <>
+                {/* Tab switcher */}
+                <div style={{ display: "flex", gap: 4, marginBottom: 16 }}>
+                  {[{ id: "restaurant", label: "🍽 Restaurant" }, { id: "grocery", label: "🛒 Grocery" }].map(tab => (
+                    <button key={tab.id} onClick={() => setGroTab(tab.id)} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: "none", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", transition: "all .2s", background: groTab === tab.id ? t1 : sf, color: groTab === tab.id ? "#000" : t3 }}>{tab.label}</button>
+                  ))}
+                </div>
+
+                {/* ═══ RESTAURANT TAB ═══ */}
+                {groTab === "restaurant" && (
+                  <div>
+                    <div style={{ position: "relative", marginBottom: 12 }}>
+                      <input className="ip" style={{ paddingLeft: 32 }} placeholder="Search restaurant... (McDonald's, Chipotle, etc.)" value={restSearch} onChange={e => { setRestSearch(e.target.value); setRestPicks(null); setRestResults(searchRestaurants(e.target.value)); }} />
+                      <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 13, opacity: 0.3 }}>🔍</span>
+
+                      {/* Search dropdown */}
+                      {restResults.length > 0 && !restPicks && (
+                        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 20, background: "#111", border: `1px solid ${bd}`, borderRadius: 12, marginTop: 4, boxShadow: "0 12px 40px rgba(0,0,0,.6)", overflow: "hidden" }}>
+                          {restResults.map((r, i) => (
+                            <div key={i} onClick={() => { setRestPicks(getRestaurantPicks(r, nGoal)); setRestSearch(r); setRestResults([]); }} style={{ padding: "12px 16px", cursor: "pointer", borderBottom: `1px solid rgba(255,255,255,.04)`, transition: "background .1s", fontSize: 14, fontWeight: 500 }} onMouseEnter={e => e.currentTarget.style.background = sf2} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                              {r}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Picks */}
+                    {restPicks && (
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 600, color: t3, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 10 }}>Best {nGoal} options at {restSearch}</div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                          {restPicks.map((pick, i) => (
+                            <div key={i} style={{ background: sf, border: `1px solid ${bd}`, borderRadius: 14, padding: 16 }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start", gap: 12 }}>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                    <span style={{ fontSize: 16, fontWeight: 700, fontFamily: "'JetBrains Mono'" }}>#{i + 1}</span>
+                                    <span style={{ fontSize: 15, fontWeight: 600 }}>{pick.name}</span>
+                                  </div>
+                                  <p style={{ fontSize: 12, color: t3, marginTop: 6, lineHeight: 1.4 }}>{pick.why}</p>
+                                </div>
+                                <button onClick={() => { addFood({ name: `${restSearch}: ${pick.name}`, cals: pick.cals, protein: pick.protein, carbs: pick.carbs, fat: pick.fat, source: "search" }); }} style={{ background: sf2, border: `1px solid ${bd}`, borderRadius: 8, padding: "6px 12px", fontSize: 10, fontWeight: 600, color: t2, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap", flexShrink: 0 }}>+ Log</button>
+                              </div>
+                              <div style={{ display: "flex", gap: 16, marginTop: 10, paddingTop: 10, borderTop: `1px solid rgba(255,255,255,.05)` }}>
+                                {[{ l: "Cal", v: pick.cals }, { l: "Protein", v: `${pick.protein}g` }, { l: "Carbs", v: `${pick.carbs}g` }, { l: "Fat", v: `${pick.fat}g` }].map(m => (
+                                  <div key={m.l} style={{ textAlign: "center" }}>
+                                    <div style={{ fontSize: 9, fontWeight: 600, color: t3, textTransform: "uppercase", marginBottom: 2 }}>{m.l}</div>
+                                    <div style={{ fontSize: 16, fontWeight: 800, fontFamily: "'JetBrains Mono'" }}>{m.v}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <p style={{ fontSize: 10, color: t3, marginTop: 10 }}>Tap "+ Log" to add any meal to your daily food tracker.</p>
+                      </div>
+                    )}
+
+                    {!restPicks && !restResults.length && restSearch.length > 0 && (
+                      <div style={{ background: sf, border: `1px solid ${bd}`, borderRadius: 14, padding: 20, textAlign: "center" }}>
+                        <p style={{ fontSize: 13, color: t2 }}>Restaurant not in our database yet.</p>
+                        <p style={{ fontSize: 11, color: t3, marginTop: 4 }}>Try: McDonald's, Chick-fil-A, Chipotle, Subway, Taco Bell, Wendy's, Five Guys, In-N-Out, Panda Express, Popeyes, KFC, Starbucks, Raising Cane's, Wingstop</p>
+                      </div>
+                    )}
+
+                    {!restSearch && (
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))", gap: 6 }}>
+                        {RESTAURANT_NAMES.map(r => (
+                          <div key={r} onClick={() => { setRestSearch(r); setRestPicks(getRestaurantPicks(r, nGoal)); setRestResults([]); }} style={{ background: sf, border: `1px solid ${bd}`, borderRadius: 12, padding: "14px 12px", cursor: "pointer", textAlign: "center", fontSize: 13, fontWeight: 500, color: t2, transition: "all .15s" }} onMouseEnter={e => { e.currentTarget.style.background = sf2; e.currentTarget.style.borderColor = "rgba(255,255,255,.2)"; }} onMouseLeave={e => { e.currentTarget.style.background = sf; e.currentTarget.style.borderColor = bd; }}>
+                            {r}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ═══ GROCERY TAB ═══ */}
+                {groTab === "grocery" && (
+                  <>
                 <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
                   <input className="ip" style={{ flex: 1 }} placeholder="Zip, city, or address..." value={groLoc} onChange={e => setGroLoc(e.target.value)} onKeyDown={e => e.key === "Enter" && findStores()} />
                   <button onClick={findStores} disabled={!groLoc || storeLoading} style={{ background: t1, color: "#000", border: "none", borderRadius: 12, padding: "0 20px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 6, opacity: groLoc && !storeLoading ? 1 : 0.3 }}>
@@ -1125,6 +1401,8 @@ export default function App() {
                       );
                     })}
                   </div>
+                )}
+                </>
                 )}
               </>
             )}
