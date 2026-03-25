@@ -265,47 +265,92 @@ const PROTOCOL_DETAIL = [
 /* ═══════════════════════════════════════════════════════════════
    LOAD PREDICTION ENGINE
 
-   Uses Epley formula (1RM = w × (1 + r/30)) to convert the
-   user's Week 1 10RM into predicted loads for every subsequent
-   week. "UP" weeks get a ~5% bump (typical progressive overload
-   for intermediates). Adjustments:
-     +5% "feeling great" / -5% "rough day"
-   The prediction is a SUGGESTION — users type over it to override.
-   ═══════════════════════════════════════════════════════════════ */
-function predictLoad(tenRM, weekIdx, setIdx, feeling) {
-  if (!tenRM || tenRM <= 0) return null;
-  const w = Number(tenRM);
-  // Estimated 1RM from 10RM using Epley
-  const oneRM = w * (1 + 10 / 30); // ≈ 1.333 × 10RM
+   Builds predictions from the user's ACTUAL logged weights.
+   - Week 1: no prediction (user enters their 10RM)
+   - "SAME" weeks: pull exact weight from the prior week's logs
+   - "UP" weeks: take prior week's S1 + ~5% bump (rounded to 5 lbs)
+   - "-10%" sets: 90% of that week's S1 prediction
+   - Week 12 PR: same load as Week 11 S1 (attempting more reps)
 
-  // Week-by-week primary set load as % of 1RM
-  // Based on rep ranges: 10r≈75%, 8r≈78%, 6r≈83%, 7r≈80%, 5r≈87%, 4r≈90%
-  // Progressive overload adds ~2-3% per "UP" phase
-  const weekPct = [
-    [0.75],                   // Wk1: 10RM (75% 1RM) × 1 set
-    [0.75, 0.75],             // Wk2: same 10RM load for 8 reps (submaximal)
-    [0.83, 0.83],             // Wk3: UP to ~6RM territory
-    [0.83, 0.747],            // Wk4: same load for 7 reps, S2 -10%
-    [0.87, 0.783],            // Wk5: UP to ~5RM territory
-    [0.87, 0.783],            // Wk6: SAME (hold)
-    [0.89, 0.801],            // Wk7: UP again (adaptation kicking in)
-    [0.91, 0.819],            // Wk8: UP (peak approach)
-    [0.91, 0.819],            // Wk9: SAME (hold)
-    [0.93, 0.837],            // Wk10: UP to ~4RM (near peak)
-    [0.93, 0.837],            // Wk11: SAME (hold)
-    [0.93, 0.837],            // Wk12: PR attempt — 5 reps at Wk11 4-rep load
+   Falls back to Epley formula from Week 1 10RM if no prior data.
+   Users override by simply typing a different number.
+   ═══════════════════════════════════════════════════════════════ */
+function predictLoad(weekIdx, setIdx, dayIdx, exIdx, logs) {
+  if (weekIdx === 0) return null; // Week 1: user enters 10RM, no prediction
+
+  // Helper: get the actual logged weight for a specific week/day/exercise/set
+  const getLogged = (wk, si) => {
+    const v = logs[`${wk}-${dayIdx}-${exIdx}-${si}`];
+    return v ? Number(v) : null;
+  };
+
+  // Try to find the best reference weight by walking backward through logs
+  // For S1: find the most recent S1 logged weight
+  const findPriorS1 = (beforeWeek) => {
+    for (let w = beforeWeek - 1; w >= 0; w--) {
+      const v = getLogged(w, 0);
+      if (v) return { weight: v, fromWeek: w };
+    }
+    return null;
+  };
+
+  // Protocol logic per week (what S1 and S2 should do relative to prior)
+  // "same" = same as prior week's S1
+  // "up" = prior week's S1 + ~5%
+  // "backoff" = this week's S1 × 0.9
+  const rules = [
+    null,                                           // Wk0 (1): enter 10RM
+    [{ ref: "same" }, { ref: "same" }],             // Wk1 (2): same 10RM load
+    [{ ref: "up" }, { ref: "s1same" }],             // Wk2 (3): UP, S2 = S1
+    [{ ref: "same" }, { ref: "backoff" }],          // Wk3 (4): same, S2 -10%
+    [{ ref: "up" }, { ref: "backoff" }],            // Wk4 (5): UP, S2 -10%
+    [{ ref: "same" }, { ref: "backoff" }],          // Wk5 (6): SAME, S2 -10%
+    [{ ref: "up" }, { ref: "backoff" }],            // Wk6 (7): UP, S2 -10%
+    [{ ref: "up" }, { ref: "backoff" }],            // Wk7 (8): UP, S2 -10%
+    [{ ref: "same" }, { ref: "backoff" }],          // Wk8 (9): SAME, S2 -10%
+    [{ ref: "up" }, { ref: "backoff" }],            // Wk9 (10): UP, S2 -10%
+    [{ ref: "same" }, { ref: "backoff" }],          // Wk10 (11): SAME
+    [{ ref: "same" }, { ref: "backoff" }],          // Wk11 (12): PR — same load, more reps
   ];
 
-  const pcts = weekPct[weekIdx];
-  if (!pcts || setIdx >= pcts.length) return null;
+  const weekRules = rules[weekIdx];
+  if (!weekRules || setIdx >= weekRules.length) return null;
 
-  let load = Math.round(oneRM * pcts[setIdx] / 5) * 5; // round to nearest 5 lbs
+  const rule = weekRules[setIdx];
+  const prior = findPriorS1(weekIdx);
 
-  // Feeling adjustment
-  if (feeling === "great") load = Math.round((load * 1.05) / 5) * 5;
-  if (feeling === "rough") load = Math.round((load * 0.95) / 5) * 5;
+  if (!prior) {
+    // Fallback: use Week 1 10RM + Epley formula
+    const tenRM = getLogged(0, 0);
+    if (!tenRM) return null;
+    const oneRM = tenRM * (1 + 10 / 30);
+    const fallbackPcts = [null, [0.75, 0.75], [0.83, 0.83], [0.83, 0.747], [0.87, 0.783], [0.87, 0.783], [0.89, 0.801], [0.91, 0.819], [0.91, 0.819], [0.93, 0.837], [0.93, 0.837], [0.93, 0.837]];
+    const pcts = fallbackPcts[weekIdx];
+    if (!pcts || setIdx >= pcts.length) return null;
+    return Math.round((oneRM * pcts[setIdx]) / 5) * 5;
+  }
 
-  return load;
+  const priorWeight = prior.weight;
+
+  if (rule.ref === "same") {
+    return Math.round(priorWeight / 5) * 5;
+  }
+  if (rule.ref === "up") {
+    return Math.round((priorWeight * 1.05) / 5) * 5;
+  }
+  if (rule.ref === "s1same") {
+    // S2 same as S1 this week
+    const s1pred = predictLoad(weekIdx, 0, dayIdx, exIdx, logs);
+    return s1pred;
+  }
+  if (rule.ref === "backoff") {
+    // 90% of this week's S1
+    const s1 = getLogged(weekIdx, 0) || predictLoad(weekIdx, 0, dayIdx, exIdx, logs);
+    if (!s1) return null;
+    return Math.round((Number(s1) * 0.9) / 5) * 5;
+  }
+
+  return null;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -396,7 +441,6 @@ export default function App() {
   const [logs, setLogs] = useState({});
   const [swapIdx, setSwapIdx] = useState(null);
   const [vidIdx, setVidIdx] = useState(null);
-  const [feeling, setFeeling] = useState(null); // null | "great" | "rough"
 
   // Nutrition
   const [nGoal, setNGoal] = useState(null);
@@ -448,7 +492,6 @@ export default function App() {
       if (d.nSetup) setNSetup(d.nSetup);
       if (d.weekCheckins) setWeekCheckins(d.weekCheckins);
       if (d.foodLog) setFoodLog(d.foodLog);
-      if (d.feeling) setFeeling(d.feeling);
     }
   }, [profileId]);
 
@@ -458,7 +501,7 @@ export default function App() {
     if (!profileId) return;
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      saveProfileData(profileId, { equip: [...equip], splitId, program, step, logs, checked: [...checked], nGoal, nWeight, nHeight, nSetup, weekCheckins, foodLog, feeling });
+      saveProfileData(profileId, { equip: [...equip], splitId, program, step, logs, checked: [...checked], nGoal, nWeight, nHeight, nSetup, weekCheckins, foodLog });
     }, 500);
   }, [profileId, equip, splitId, program, step, logs, checked, nGoal, nWeight, nHeight, nSetup, weekCheckins, foodLog]);
 
@@ -657,31 +700,8 @@ export default function App() {
 
             {/* Protocol */}
             <div style={{ background: sf, border: `1px solid ${bd}`, borderRadius: 14, padding: 16, marginBottom: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "start" }}>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 600 }}>{proto.label}</div>
-                  <p style={{ fontSize: 12, color: t2, marginTop: 4 }}>{proto.note}</p>
-                </div>
-              </div>
-              {/* Feeling adjuster */}
-              {activeWeek > 0 && (
-                <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid rgba(255,255,255,.05)` }}>
-                  <div style={{ fontSize: 10, fontWeight: 600, color: t3, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>How are you feeling today?</div>
-                  <div style={{ display: "flex", gap: 6 }}>
-                    {[
-                      { id: null, label: "Normal", emoji: "😐" },
-                      { id: "great", label: "+5% Load", emoji: "🔥" },
-                      { id: "rough", label: "−5% Load", emoji: "😮‍💨" },
-                    ].map((f) => (
-                      <button key={f.label} onClick={() => setFeeling(f.id)} style={{ flex: 1, padding: "10px 8px", borderRadius: 10, border: `1px solid ${feeling === f.id ? "rgba(255,255,255,.3)" : bd}`, background: feeling === f.id ? sf2 : sf, color: feeling === f.id ? t1 : t3, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", transition: "all .15s" }}>
-                        <div style={{ fontSize: 16, marginBottom: 2 }}>{f.emoji}</div>
-                        {f.label}
-                      </button>
-                    ))}
-                  </div>
-                  <p style={{ fontSize: 10, color: t3, marginTop: 6 }}>Predicted loads adjust based on your Week 1 entries. Override any weight by typing over it.</p>
-                </div>
-              )}
+              <div style={{ fontSize: 14, fontWeight: 600 }}>{proto.label}</div>
+              <p style={{ fontSize: 12, color: t2, marginTop: 4 }}>{proto.note}</p>
             </div>
 
             {/* Day tabs */}
@@ -742,8 +762,7 @@ export default function App() {
                     {/* Weight logging with predicted loads */}
                     <div style={{ marginTop: 8, paddingLeft: 32 }}>
                       {Array.from({ length: proto.sets }).map((_, si) => {
-                        const tenRM = logs[`0-${activeDay}-${i}-0`]; // Week 1 set 1 = their 10RM
-                        const predicted = activeWeek > 0 ? predictLoad(tenRM, activeWeek, si, feeling) : null;
+                        const predicted = predictLoad(activeWeek, si, activeDay, i, logs);
                         const current = getW(i, si);
                         const isOverride = current && predicted && Number(current) !== predicted;
                         return (
